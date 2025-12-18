@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Şifreleme Aracı - Sezar & Rail Fence</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <h1>Şifreleme Aracı</h1>
+        <p>Sezar ve Rail Fence algoritmaları ile şifreleme ve deşifreleme yapın.</p>
+      </header>
+
+      <main class="main">
+        <section class="card">
+          <div class="card-header">
+            <h2>Girdi</h2>
+          </div>
+          <div class="card-body">
+            <label class="field">
+              <span>Metin</span>
+              <textarea
+                id="inputText"
+                rows="5"
+                placeholder="Şifrelenecek veya çözülecek metni buraya yazın..."
+              ></textarea>
+            </label>
+
+            <label class="field">
+              <span>Algoritma</span>
+              <select id="algorithm">
+                <option value="caesar">Sezar Şifrelemesi</option>
+                <option value="railFence">Rail Fence Şifrelemesi</option>
+              </select>
+            </label>
+
+            <div class="algorithm-options" id="caesarOptions">
+              <label class="field inline">
+                <span>Kaydırma (shift)</span>
+                <input
+                  type="number"
+                  id="caesarShift"
+                  value="3"
+                  min="-25"
+                  max="25"
+                />
+              </label>
+            </div>
+
+            <div class="algorithm-options hidden" id="railFenceOptions">
+              <label class="field inline">
+                <span>Katman (rail) sayısı</span>
+                <input
+                  type="number"
+                  id="railFenceRails"
+                  value="3"
+                  min="2"
+                  max="20"
+                />
+              </label>
+            </div>
+
+            <div class="mode-toggle">
+              <label>
+                <input
+                  type="radio"
+                  name="mode"
+                  value="encrypt"
+                  checked
+                />
+                Şifrele
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="mode"
+                  value="decrypt"
+                />
+                Deşifre Et
+              </label>
+            </div>
+
+            <div class="actions">
+              <button id="runBtn">Çalıştır</button>
+              <button id="clearBtn" class="secondary">Temizle</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h2>Sonuç</h2>
+          </div>
+          <div class="card-body">
+            <label class="field">
+              <span>Çıktı Metni</span>
+              <textarea
+                id="outputText"
+                rows="5"
+                readonly
+                placeholder="Sonuç burada görünecek..."
+              ></textarea>
+            </label>
+            <button id="copyBtn" class="secondary full">Çıktıyı Kopyala</button>
+            <p class="helper" id="status"></p>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <small>
+          Sezar: her harfi alfabe üzerinde kaydırır. Rail Fence: harfleri zikzak
+          şekilde katmanlara dağıtarak yer değiştirir.
+        </small>
+      </footer>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
+
+

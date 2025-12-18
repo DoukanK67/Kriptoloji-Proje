@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Şifreleme Aracı (Python) - Sezar & Rail Fence</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <h1>Şifreleme Aracı (Python)</h1>
+        <p>Sezar ve Rail Fence algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
+      </header>
+
+      <main class="main">
+        <section class="card">
+          <div class="card-header">
+            <h2>Girdi</h2>
+          </div>
+          <div class="card-body">
+            <form method="post" id="cipherForm">
+              <label class="field">
+                <span>Metin</span>
+                <textarea
+                  name="text"
+                  rows="5"
+                  placeholder="Şifrelenecek veya çözülecek metni buraya yazın..."
+                >{{ state.text }}</textarea>
+              </label>
+
+              <label class="field">
+                <span>Algoritma</span>
+                <select name="algorithm" id="algorithm">
+                  <option value="caesar" {% if state.algorithm == "caesar" %}selected{% endif %}>
+                    Sezar Şifrelemesi
+                  </option>
+                  <option value="railFence" {% if state.algorithm == "railFence" %}selected{% endif %}>
+                    Rail Fence Şifrelemesi
+                  </option>
+                </select>
+              </label>
+
+              <div
+                class="algorithm-options"
+                id="caesarOptions"
+                {% if state.algorithm != "caesar" %}style="display:none"{% endif %}
+              >
+                <label class="field inline">
+                  <span>Kaydırma (shift)</span>
+                  <input
+                    type="number"
+                    name="caesarShift"
+                    value="{{ state.caesar_shift }}"
+                    min="-25"
+                    max="25"
+                  />
+                </label>
+              </div>
+
+              <div
+                class="algorithm-options"
+                id="railFenceOptions"
+                {% if state.algorithm != "railFence" %}style="display:none"{% endif %}
+              >
+                <label class="field inline">
+                  <span>Katman (rail) sayısı</span>
+                  <input
+                    type="number"
+                    name="railRails"
+                    value="{{ state.rail_rails }}"
+                    min="2"
+                    max="20"
+                  />
+                </label>
+              </div>
+
+              <div class="mode-toggle">
+                <label>
+                  <input
+                    type="radio"
+                    name="mode"
+                    value="encrypt"
+                    {% if state.mode == "encrypt" %}checked{% endif %}
+                  />
+                  Şifrele
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="mode"
+                    value="decrypt"
+                    {% if state.mode == "decrypt" %}checked{% endif %}
+                  />
+                  Deşifre Et
+                </label>
+              </div>
+
+              <div class="actions">
+                <button type="submit" id="runBtn">Çalıştır</button>
+                <button type="button" id="clearBtn" class="secondary">Temizle</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h2>Sonuç</h2>
+          </div>
+          <div class="card-body">
+            <label class="field">
+              <span>Çıktı Metni</span>
+              <textarea
+                id="outputText"
+                rows="5"
+                readonly
+                placeholder="Sonuç burada görünecek..."
+              >{{ state.output }}</textarea>
+            </label>
+            <button id="copyBtn" class="secondary full" type="button">Çıktıyı Kopyala</button>
+            <p
+              class="helper"
+              id="status"
+              style="color: {% if state.is_error %}#f87171{% else %}#9ca3af{% endif %}"
+            >
+              {{ state.status }}
+            </p>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <small>
+          Sezar: her harfi alfabe üzerinde kaydırır. Rail Fence: harfleri zikzak
+          şekilde katmanlara dağıtarak yer değiştirir.
+        </small>
+      </footer>
+    </div>
+
+    <script>
+      // Algoritma seçimine göre seçenek alanlarını göster/gizle
+      const algorithmSelect = document.getElementById("algorithm");
+      const caesarOptions = document.getElementById("caesarOptions");
+      const railFenceOptions = document.getElementById("railFenceOptions");
+      const clearBtn = document.getElementById("clearBtn");
+      const outputText = document.getElementById("outputText");
+      const statusEl = document.getElementById("status");
+      const copyBtn = document.getElementById("copyBtn");
+      const form = document.getElementById("cipherForm");
+
+      algorithmSelect.addEventListener("change", () => {
+        const val = algorithmSelect.value;
+        if (val === "caesar") {
+          caesarOptions.style.display = "";
+          railFenceOptions.style.display = "none";
+        } else {
+          caesarOptions.style.display = "none";
+          railFenceOptions.style.display = "";
+        }
+      });
+
+      clearBtn.addEventListener("click", () => {
+        form.reset();
+        outputText.value = "";
+        statusEl.textContent = "";
+      });
+
+      copyBtn.addEventListener("click", () => {
+        const text = outputText.value;
+        if (!text) {
+          statusEl.textContent = "Kopyalanacak çıktı yok.";
+          statusEl.style.color = "#f87171";
+          return;
+        }
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            statusEl.textContent = "Çıktı panoya kopyalandı.";
+            statusEl.style.color = "#9ca3af";
+          })
+          .catch(() => {
+            statusEl.textContent = "Kopyalama başarısız oldu.";
+            statusEl.style.color = "#f87171";
+          });
+      });
+    </script>
+  </body>
+</html>
+
+
