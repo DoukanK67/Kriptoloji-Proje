@@ -2,7 +2,7 @@
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
-    <title>Şifreleme Aracı (Python) - Sezar & Rail Fence</title>
+    <title>Şifreleme Aracı (Python) - Çoklu Şifreleme Algoritmaları</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
@@ -10,7 +10,7 @@
     <div class="app">
       <header class="header">
         <h1>Şifreleme Aracı (Python)</h1>
-        <p>Sezar ve Rail Fence algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
+        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair ve Route algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
       </header>
 
       <main class="main">
@@ -37,6 +37,18 @@
                   </option>
                   <option value="railFence" {% if state.algorithm == "railFence" %}selected{% endif %}>
                     Rail Fence Şifrelemesi
+                  </option>
+                  <option value="vigenere" {% if state.algorithm == "vigenere" %}selected{% endif %}>
+                    Vigenere Şifrelemesi
+                  </option>
+                  <option value="vernam" {% if state.algorithm == "vernam" %}selected{% endif %}>
+                    Vernam Şifrelemesi
+                  </option>
+                  <option value="playfair" {% if state.algorithm == "playfair" %}selected{% endif %}>
+                    Playfair Şifrelemesi
+                  </option>
+                  <option value="route" {% if state.algorithm == "route" %}selected{% endif %}>
+                    Route Şifrelemesi
                   </option>
                 </select>
               </label>
@@ -69,6 +81,81 @@
                     type="number"
                     name="railRails"
                     value="{{ state.rail_rails }}"
+                    min="2"
+                    max="20"
+                  />
+                </label>
+              </div>
+
+              <div
+                class="algorithm-options"
+                id="vigenereOptions"
+                {% if state.algorithm != "vigenere" %}style="display:none"{% endif %}
+              >
+                <label class="field">
+                  <span>Anahtar Kelime</span>
+                  <input
+                    type="text"
+                    name="vigenereKey"
+                    value="{{ state.vigenere_key }}"
+                    placeholder="Anahtar kelime girin..."
+                  />
+                </label>
+              </div>
+
+              <div
+                class="algorithm-options"
+                id="vernamOptions"
+                {% if state.algorithm != "vernam" %}style="display:none"{% endif %}
+              >
+                <label class="field">
+                  <span>Anahtar (One-Time Pad)</span>
+                  <input
+                    type="text"
+                    name="vernamKey"
+                    value="{{ state.vernam_key }}"
+                    placeholder="Anahtar girin..."
+                  />
+                </label>
+              </div>
+
+              <div
+                class="algorithm-options"
+                id="playfairOptions"
+                {% if state.algorithm != "playfair" %}style="display:none"{% endif %}
+              >
+                <label class="field">
+                  <span>Anahtar Kelime</span>
+                  <input
+                    type="text"
+                    name="playfairKey"
+                    value="{{ state.playfair_key }}"
+                    placeholder="Anahtar kelime girin..."
+                  />
+                </label>
+              </div>
+
+              <div
+                class="algorithm-options"
+                id="routeOptions"
+                {% if state.algorithm != "route" %}style="display:none"{% endif %}
+              >
+                <label class="field inline">
+                  <span>Satır Sayısı</span>
+                  <input
+                    type="number"
+                    name="routeRows"
+                    value="{{ state.route_rows }}"
+                    min="2"
+                    max="20"
+                  />
+                </label>
+                <label class="field inline">
+                  <span>Sütun Sayısı</span>
+                  <input
+                    type="number"
+                    name="routeCols"
+                    value="{{ state.route_cols }}"
                     min="2"
                     max="20"
                   />
@@ -132,8 +219,9 @@
 
       <footer class="footer">
         <small>
-          Sezar: her harfi alfabe üzerinde kaydırır. Rail Fence: harfleri zikzak
-          şekilde katmanlara dağıtarak yer değiştirir.
+          Sezar: her harfi alfabe üzerinde kaydırır. Rail Fence: harfleri zikzak şekilde katmanlara dağıtarak yer değiştirir.
+          Vigenere: anahtar kelime ile harfleri kaydırır. Vernam: XOR tabanlı şifreleme. Playfair: 5x5 grid kullanır.
+          Route: metni grid'e yerleştirip spiral rotada okur.
         </small>
       </footer>
     </div>
@@ -143,21 +231,47 @@
       const algorithmSelect = document.getElementById("algorithm");
       const caesarOptions = document.getElementById("caesarOptions");
       const railFenceOptions = document.getElementById("railFenceOptions");
+      const vigenereOptions = document.getElementById("vigenereOptions");
+      const vernamOptions = document.getElementById("vernamOptions");
+      const playfairOptions = document.getElementById("playfairOptions");
+      const routeOptions = document.getElementById("routeOptions");
       const clearBtn = document.getElementById("clearBtn");
       const outputText = document.getElementById("outputText");
       const statusEl = document.getElementById("status");
       const copyBtn = document.getElementById("copyBtn");
       const form = document.getElementById("cipherForm");
 
+      function hideAllOptions() {
+        caesarOptions.style.display = "none";
+        railFenceOptions.style.display = "none";
+        vigenereOptions.style.display = "none";
+        vernamOptions.style.display = "none";
+        playfairOptions.style.display = "none";
+        routeOptions.style.display = "none";
+      }
+
       algorithmSelect.addEventListener("change", () => {
         const val = algorithmSelect.value;
+        hideAllOptions();
+        
         if (val === "caesar") {
           caesarOptions.style.display = "";
-          railFenceOptions.style.display = "none";
-        } else {
-          caesarOptions.style.display = "none";
+        } else if (val === "railFence") {
           railFenceOptions.style.display = "";
+        } else if (val === "vigenere") {
+          vigenereOptions.style.display = "";
+        } else if (val === "vernam") {
+          vernamOptions.style.display = "";
+        } else if (val === "playfair") {
+          playfairOptions.style.display = "";
+        } else if (val === "route") {
+          routeOptions.style.display = "";
         }
+      });
+
+      // Sayfa yüklendiğinde doğru seçeneği göster
+      window.addEventListener("DOMContentLoaded", () => {
+        algorithmSelect.dispatchEvent(new Event("change"));
       });
 
       clearBtn.addEventListener("click", () => {
