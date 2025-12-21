@@ -435,11 +435,332 @@ def route_decrypt(cipher: str, rows: int, cols: int, direction: str = "spiral") 
   return "".join(result).rstrip("X")
 
 
+# Affine Şifreleme
+def gcd_extended(a: int, b: int) -> tuple[int, int, int]:
+  """Extended Euclidean Algorithm - gcd ve modüler ters için"""
+  if a == 0:
+    return b, 0, 1
+  gcd, x1, y1 = gcd_extended(b % a, a)
+  x = y1 - (b // a) * x1
+  y = x1
+  return gcd, x, y
+
+
+def mod_inverse(a: int, m: int) -> int:
+  """a'nın mod m'deki tersini bulur"""
+  gcd, x, _ = gcd_extended(a, m)
+  if gcd != 1:
+    return None  # Ters yok
+  return (x % m + m) % m
+
+
+def affine_encrypt(text: str, a: int, b: int) -> str:
+  """Affine şifreleme: E(x) = (ax + b) mod 26"""
+  if gcd_extended(a, 26)[0] != 1:
+    raise ValueError("a ve 26 aralarında asal olmalıdır (gcd(a, 26) = 1)")
+  
+  result = []
+  for ch in text:
+    if ch.isalpha():
+      is_upper = ch.isupper()
+      ch_code = ord(ch.upper()) - ord("A")
+      encrypted_code = (a * ch_code + b) % 26
+      encrypted_char = chr(encrypted_code + ord("A"))
+      result.append(encrypted_char if is_upper else encrypted_char.lower())
+    else:
+      result.append(ch)
+  
+  return "".join(result)
+
+
+def affine_decrypt(cipher: str, a: int, b: int) -> str:
+  """Affine deşifreleme: D(x) = a^(-1)(x - b) mod 26"""
+  a_inv = mod_inverse(a, 26)
+  if a_inv is None:
+    raise ValueError("a'nın mod 26'da tersi yok")
+  
+  result = []
+  for ch in cipher:
+    if ch.isalpha():
+      is_upper = ch.isupper()
+      ch_code = ord(ch.upper()) - ord("A")
+      decrypted_code = (a_inv * (ch_code - b + 26)) % 26
+      decrypted_char = chr(decrypted_code + ord("A"))
+      result.append(decrypted_char if is_upper else decrypted_char.lower())
+    else:
+      result.append(ch)
+  
+  return "".join(result)
+
+
+# Hill Cipher Şifreleme
+def hill_create_matrix(key: str, size: int) -> list[list[int]]:
+  """Anahtar kelimeden Hill Cipher matrisi oluşturur"""
+  key_clean = "".join(ch.upper() for ch in key if ch.isalpha())
+  
+  # Matris boyutuna göre anahtarı doldur
+  if len(key_clean) < size * size:
+    key_clean = key_clean.ljust(size * size, "A")
+  elif len(key_clean) > size * size:
+    key_clean = key_clean[:size * size]
+  
+  matrix = []
+  for i in range(size):
+    row = []
+    for j in range(size):
+      char_code = ord(key_clean[i * size + j]) - ord("A")
+      row.append(char_code)
+    matrix.append(row)
+  
+  return matrix
+
+
+def hill_matrix_determinant(matrix: list[list[int]]) -> int:
+  """2x2 matris determinantı hesaplar"""
+  if len(matrix) == 2:
+    return (matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]) % 26
+  return 0
+
+
+def hill_matrix_inverse(matrix: list[list[int]]) -> list[list[int]]:
+  """2x2 matrisin mod 26'da tersini bulur"""
+  det = hill_matrix_determinant(matrix)
+  det_inv = mod_inverse(det, 26)
+  
+  if det_inv is None:
+    raise ValueError("Matris determinantının mod 26'da tersi yok")
+  
+  # 2x2 matris için ters formül
+  a, b = matrix[0][0], matrix[0][1]
+  c, d = matrix[1][0], matrix[1][1]
+  
+  inverse = [
+    [(det_inv * d) % 26, (-det_inv * b) % 26],
+    [(-det_inv * c) % 26, (det_inv * a) % 26]
+  ]
+  
+  return inverse
+
+
+def hill_multiply_matrix_vector(matrix: list[list[int]], vector: list[int]) -> list[int]:
+  """Matris-vektör çarpımı"""
+  result = []
+  for row in matrix:
+    total = sum(row[i] * vector[i] for i in range(len(vector))) % 26
+    result.append(total)
+  return result
+
+
+def hill_encrypt(text: str, key: str, size: int = 2) -> str:
+  """Hill Cipher şifreleme"""
+  if size < 2 or size > 3:
+    size = 2  # Sadece 2x2 veya 3x3 desteklenir, basitlik için 2x2 kullanıyoruz
+  
+  matrix = hill_create_matrix(key, size)
+  
+  text_clean = "".join(ch.upper() for ch in text if ch.isalpha())
+  if not text_clean:
+    return text
+  
+  # Metni bloklara ayır (eksikse X ekle)
+  if len(text_clean) % size != 0:
+    text_clean += "X" * (size - (len(text_clean) % size))
+  
+  result_chars = []
+  original_positions = []  # Orijinal pozisyonları ve harf durumunu sakla
+  text_idx = 0
+  
+  for i, ch in enumerate(text):
+    if ch.isalpha():
+      original_positions.append((i, ch.isupper(), text_idx))
+      text_idx += 1
+    else:
+      original_positions.append((i, None, None))
+  
+  # Her blok için şifreleme
+  for block_start in range(0, len(text_clean), size):
+    block = text_clean[block_start:block_start + size]
+    vector = [ord(ch) - ord("A") for ch in block]
+    encrypted_vector = hill_multiply_matrix_vector(matrix, vector)
+    encrypted_block = "".join(chr(code + ord("A")) for code in encrypted_vector)
+    result_chars.extend(encrypted_block)
+  
+  # Sonucu orijinal metin formatına göre düzenle
+  result = list(text)
+  char_idx = 0
+  for i, ch in enumerate(text):
+    if ch.isalpha():
+      if char_idx < len(result_chars):
+        is_upper = original_positions[i][1]
+        result[i] = result_chars[char_idx] if is_upper else result_chars[char_idx].lower()
+        char_idx += 1
+  
+  return "".join(result)
+
+
+def hill_decrypt(cipher: str, key: str, size: int = 2) -> str:
+  """Hill Cipher deşifreleme"""
+  if size < 2 or size > 3:
+    size = 2
+  
+  matrix = hill_create_matrix(key, size)
+  
+  try:
+    inverse_matrix = hill_matrix_inverse(matrix)
+  except ValueError:
+    raise ValueError("Anahtar matrisin tersi alınamıyor")
+  
+  cipher_clean = "".join(ch.upper() for ch in cipher if ch.isalpha())
+  if not cipher_clean:
+    return cipher
+  
+  if len(cipher_clean) % size != 0:
+    cipher_clean += "X" * (size - (len(cipher_clean) % size))
+  
+  result_chars = []
+  original_positions = []
+  cipher_idx = 0
+  
+  for i, ch in enumerate(cipher):
+    if ch.isalpha():
+      original_positions.append((i, ch.isupper(), cipher_idx))
+      cipher_idx += 1
+    else:
+      original_positions.append((i, None, None))
+  
+  # Her blok için deşifreleme
+  for block_start in range(0, len(cipher_clean), size):
+    block = cipher_clean[block_start:block_start + size]
+    vector = [ord(ch) - ord("A") for ch in block]
+    decrypted_vector = hill_multiply_matrix_vector(inverse_matrix, vector)
+    decrypted_block = "".join(chr(code + ord("A")) for code in decrypted_vector)
+    result_chars.extend(decrypted_block)
+  
+  # Sonucu orijinal metin formatına göre düzenle
+  result = list(cipher)
+  char_idx = 0
+  for i, ch in enumerate(cipher):
+    if ch.isalpha():
+      if char_idx < len(result_chars):
+        is_upper = original_positions[i][1]
+        result[i] = result_chars[char_idx] if is_upper else result_chars[char_idx].lower()
+        char_idx += 1
+  
+  return "".join(result).rstrip("X")
+
+
+# Columnar Transposition Şifreleme
+def columnar_get_key_order(key: str) -> list[int]:
+  """Anahtar kelimeden sütun sıralamasını çıkarır"""
+  key_upper = key.upper()
+  key_chars = [(i, key_upper[i]) for i in range(len(key_upper))]
+  key_chars_sorted = sorted(key_chars, key=lambda x: (x[1], x[0]))
+  
+  order = [0] * len(key)
+  for new_pos, (old_pos, _) in enumerate(key_chars_sorted):
+    order[old_pos] = new_pos
+  
+  return order
+
+
+def columnar_get_key_order_reverse(key: str) -> list[int]:
+  """Deşifreleme için ters sıralama"""
+  order = columnar_get_key_order(key)
+  reverse_order = [0] * len(order)
+  for i, pos in enumerate(order):
+    reverse_order[pos] = i
+  return reverse_order
+
+
+def columnar_encrypt(text: str, key: str) -> str:
+  """Columnar Transposition şifreleme"""
+  if not key:
+    return text
+  
+  text_clean = "".join(ch for ch in text if ch.isalpha())
+  if not text_clean:
+    return text
+  
+  key_len = len(key)
+  num_rows = (len(text_clean) + key_len - 1) // key_len  # Yuvarlama yukarı
+  
+  # Grid oluştur
+  grid = []
+  text_idx = 0
+  for i in range(num_rows):
+    row = []
+    for j in range(key_len):
+      if text_idx < len(text_clean):
+        row.append(text_clean[text_idx])
+        text_idx += 1
+      else:
+        row.append("X")  # Eksik yerleri X ile doldur
+    grid.append(row)
+  
+  # Sütun sırasına göre oku
+  order = columnar_get_key_order(key)
+  result = []
+  
+  for col_pos in range(key_len):
+    col_idx = order.index(col_pos)
+    for row in grid:
+      result.append(row[col_idx])
+  
+  return "".join(result)
+
+
+def columnar_decrypt(cipher: str, key: str) -> str:
+  """Columnar Transposition deşifreleme"""
+  if not key:
+    return cipher
+  
+  cipher_clean = "".join(ch for ch in cipher if ch.isalpha())
+  if not cipher_clean:
+    return cipher
+  
+  key_len = len(key)
+  num_rows = (len(cipher_clean) + key_len - 1) // key_len
+  
+  # Sütun sırasını bul
+  order = columnar_get_key_order(key)
+  reverse_order = columnar_get_key_order_reverse(key)
+  
+  # Şifreli metni sütunlara dağıt
+  chars_per_col = [num_rows] * key_len
+  total_chars = num_rows * key_len
+  excess = total_chars - len(cipher_clean)
+  
+  # Fazla karakterleri son sütunlardan çıkar
+  for i in range(excess):
+    col_idx = key_len - 1 - i
+    chars_per_col[col_idx] -= 1
+  
+  # Grid oluştur
+  grid = [[None for _ in range(key_len)] for _ in range(num_rows)]
+  cipher_idx = 0
+  
+  for col_pos in range(key_len):
+    col_idx = order.index(col_pos)
+    for row in range(chars_per_col[col_idx]):
+      if cipher_idx < len(cipher_clean):
+        grid[row][col_idx] = cipher_clean[cipher_idx]
+        cipher_idx += 1
+  
+  # Grid'i satır satır oku
+  result = []
+  for row in grid:
+    for ch in row:
+      if ch:
+        result.append(ch)
+  
+  return "".join(result).rstrip("X")
+
+
 @dataclass
 class FormState:
   text: str = ""
   output: str = ""
-  algorithm: str = "caesar"  # "caesar" | "railFence" | "vigenere" | "vernam" | "playfair" | "route"
+  algorithm: str = "caesar"  # "caesar" | "railFence" | "vigenere" | "vernam" | "playfair" | "route" | "affine" | "hill" | "columnar"
   mode: str = "encrypt"  # "encrypt" | "decrypt"
   caesar_shift: int = 3
   rail_rails: int = 3
@@ -448,6 +769,11 @@ class FormState:
   playfair_key: str = ""
   route_rows: int = 4
   route_cols: int = 4
+  affine_a: int = 5
+  affine_b: int = 8
+  hill_key: str = ""
+  hill_size: int = 2
+  columnar_key: str = ""
   status: str = ""
   is_error: bool = False
 
@@ -467,6 +793,11 @@ def handle_form(req) -> FormState:
   playfair_key = (req.form.get("playfairKey") or "").strip()
   route_rows_raw = req.form.get("routeRows", "4")
   route_cols_raw = req.form.get("routeCols", "4")
+  affine_a_raw = req.form.get("affineA", "5")
+  affine_b_raw = req.form.get("affineB", "8")
+  hill_key = (req.form.get("hillKey") or "").strip()
+  hill_size_raw = req.form.get("hillSize", "2")
+  columnar_key = (req.form.get("columnarKey") or "").strip()
 
   state = FormState(
     text=text,
@@ -475,6 +806,8 @@ def handle_form(req) -> FormState:
     vigenere_key=vigenere_key,
     vernam_key=vernam_key,
     playfair_key=playfair_key,
+    hill_key=hill_key,
+    columnar_key=columnar_key,
   )
 
   try:
@@ -496,6 +829,25 @@ def handle_form(req) -> FormState:
     state.route_cols = max(2, int(route_cols_raw))
   except ValueError:
     state.route_cols = 4
+
+  try:
+    state.affine_a = int(affine_a_raw)
+    if state.affine_a < 1 or state.affine_a > 25:
+      state.affine_a = 5
+  except ValueError:
+    state.affine_a = 5
+
+  try:
+    state.affine_b = int(affine_b_raw)
+    if state.affine_b < 0 or state.affine_b > 25:
+      state.affine_b = 8
+  except ValueError:
+    state.affine_b = 8
+
+  try:
+    state.hill_size = max(2, min(3, int(hill_size_raw)))
+  except ValueError:
+    state.hill_size = 2
 
   if not text:
     state.status = "Lütfen bir metin girin."
@@ -557,6 +909,43 @@ def handle_form(req) -> FormState:
       else:
         state.output = route_decrypt(text, state.route_rows, state.route_cols)
         state.status = "Route ile deşifreleme tamamlandı."
+    elif algorithm == "affine":
+      try:
+        if mode == "encrypt":
+          state.output = affine_encrypt(text, state.affine_a, state.affine_b)
+          state.status = "Affine ile şifreleme tamamlandı."
+        else:
+          state.output = affine_decrypt(text, state.affine_a, state.affine_b)
+          state.status = "Affine ile deşifreleme tamamlandı."
+      except ValueError as e:
+        state.status = f"Affine hatası: {str(e)}"
+        state.is_error = True
+    elif algorithm == "hill":
+      if not hill_key:
+        state.status = "Hill Cipher için anahtar gereklidir."
+        state.is_error = True
+        return state
+      try:
+        if mode == "encrypt":
+          state.output = hill_encrypt(text, hill_key, state.hill_size)
+          state.status = "Hill Cipher ile şifreleme tamamlandı."
+        else:
+          state.output = hill_decrypt(text, hill_key, state.hill_size)
+          state.status = "Hill Cipher ile deşifreleme tamamlandı."
+      except ValueError as e:
+        state.status = f"Hill Cipher hatası: {str(e)}"
+        state.is_error = True
+    elif algorithm == "columnar":
+      if not columnar_key:
+        state.status = "Columnar için anahtar gereklidir."
+        state.is_error = True
+        return state
+      if mode == "encrypt":
+        state.output = columnar_encrypt(text, columnar_key)
+        state.status = "Columnar ile şifreleme tamamlandı."
+      else:
+        state.output = columnar_decrypt(text, columnar_key)
+        state.status = "Columnar ile deşifreleme tamamlandı."
     else:
       state.status = "Bilinmeyen algoritma seçildi."
       state.is_error = True

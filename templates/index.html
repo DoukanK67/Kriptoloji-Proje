@@ -10,7 +10,7 @@
     <div class="app">
       <header class="header">
         <h1>Şifreleme Aracı (Python)</h1>
-        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair ve Route algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
+        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair, Route, Affine, Hill Cipher ve Columnar algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
       </header>
 
       <main class="main">
@@ -49,6 +49,15 @@
                   </option>
                   <option value="route" {% if state.algorithm == "route" %}selected{% endif %}>
                     Route Şifrelemesi
+                  </option>
+                  <option value="affine" {% if state.algorithm == "affine" %}selected{% endif %}>
+                    Affine Şifrelemesi
+                  </option>
+                  <option value="hill" {% if state.algorithm == "hill" %}selected{% endif %}>
+                    Hill Cipher
+                  </option>
+                  <option value="columnar" {% if state.algorithm == "columnar" %}selected{% endif %}>
+                    Columnar Transposition
                   </option>
                 </select>
               </label>
@@ -162,6 +171,72 @@
                 </label>
               </div>
 
+              <div
+                class="algorithm-options"
+                id="affineOptions"
+                {% if state.algorithm != "affine" %}style="display:none"{% endif %}
+              >
+                <label class="field inline">
+                  <span>a (1-25, 26 ile aralarında asal olmalı)</span>
+                  <input
+                    type="number"
+                    name="affineA"
+                    value="{{ state.affine_a }}"
+                    min="1"
+                    max="25"
+                  />
+                </label>
+                <label class="field inline">
+                  <span>b (0-25)</span>
+                  <input
+                    type="number"
+                    name="affineB"
+                    value="{{ state.affine_b }}"
+                    min="0"
+                    max="25"
+                  />
+                </label>
+              </div>
+
+              <div
+                class="algorithm-options"
+                id="hillOptions"
+                {% if state.algorithm != "hill" %}style="display:none"{% endif %}
+              >
+                <label class="field">
+                  <span>Anahtar Kelime</span>
+                  <input
+                    type="text"
+                    name="hillKey"
+                    value="{{ state.hill_key }}"
+                    placeholder="Anahtar kelime girin..."
+                  />
+                </label>
+                <label class="field inline">
+                  <span>Matris Boyutu</span>
+                  <select name="hillSize">
+                    <option value="2" {% if state.hill_size == 2 %}selected{% endif %}>2x2</option>
+                    <option value="3" {% if state.hill_size == 3 %}selected{% endif %}>3x3</option>
+                  </select>
+                </label>
+              </div>
+
+              <div
+                class="algorithm-options"
+                id="columnarOptions"
+                {% if state.algorithm != "columnar" %}style="display:none"{% endif %}
+              >
+                <label class="field">
+                  <span>Anahtar Kelime</span>
+                  <input
+                    type="text"
+                    name="columnarKey"
+                    value="{{ state.columnar_key }}"
+                    placeholder="Anahtar kelime girin..."
+                  />
+                </label>
+              </div>
+
               <div class="mode-toggle">
                 <label>
                   <input
@@ -221,7 +296,8 @@
         <small>
           Sezar: her harfi alfabe üzerinde kaydırır. Rail Fence: harfleri zikzak şekilde katmanlara dağıtarak yer değiştirir.
           Vigenere: anahtar kelime ile harfleri kaydırır. Vernam: XOR tabanlı şifreleme. Playfair: 5x5 grid kullanır.
-          Route: metni grid'e yerleştirip spiral rotada okur.
+          Route: metni grid'e yerleştirip spiral rotada okur. Affine: (ax+b) mod 26 formülü ile şifreler.
+          Hill Cipher: matris tabanlı blok şifreleme. Columnar: metni matrise yerleştirip sütun sırasına göre okur.
         </small>
       </footer>
     </div>
@@ -235,6 +311,9 @@
       const vernamOptions = document.getElementById("vernamOptions");
       const playfairOptions = document.getElementById("playfairOptions");
       const routeOptions = document.getElementById("routeOptions");
+      const affineOptions = document.getElementById("affineOptions");
+      const hillOptions = document.getElementById("hillOptions");
+      const columnarOptions = document.getElementById("columnarOptions");
       const clearBtn = document.getElementById("clearBtn");
       const outputText = document.getElementById("outputText");
       const statusEl = document.getElementById("status");
@@ -248,6 +327,9 @@
         vernamOptions.style.display = "none";
         playfairOptions.style.display = "none";
         routeOptions.style.display = "none";
+        affineOptions.style.display = "none";
+        hillOptions.style.display = "none";
+        columnarOptions.style.display = "none";
       }
 
       algorithmSelect.addEventListener("change", () => {
@@ -266,6 +348,12 @@
           playfairOptions.style.display = "";
         } else if (val === "route") {
           routeOptions.style.display = "";
+        } else if (val === "affine") {
+          affineOptions.style.display = "";
+        } else if (val === "hill") {
+          hillOptions.style.display = "";
+        } else if (val === "columnar") {
+          columnarOptions.style.display = "";
         }
       });
 
