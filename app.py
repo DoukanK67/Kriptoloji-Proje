@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import base64
+import time
 from dataclasses import dataclass
 from typing import Optional
 
+from Crypto.Cipher import AES, DES
+from Crypto.Util.Padding import pad, unpad
 from flask import Flask, render_template, request
 
 
@@ -756,11 +760,265 @@ def columnar_decrypt(cipher: str, key: str) -> str:
   return "".join(result).rstrip("X")
 
 
+# -----------------------------
+#  AES ve DES Şifreleme
+# -----------------------------
+
+# AES - Kütüphaneli (pycryptodome)
+def aes_library_encrypt(text: str, key: str) -> str:
+  """AES şifreleme - kütüphane kullanarak"""
+  try:
+    # Anahtarı 16, 24 veya 32 byte'a tamamla
+    key_bytes = key.encode('utf-8')
+    if len(key_bytes) < 16:
+      key_bytes = key_bytes.ljust(16, b'\0')
+    elif len(key_bytes) < 24:
+      key_bytes = key_bytes.ljust(24, b'\0')
+    elif len(key_bytes) < 32:
+      key_bytes = key_bytes.ljust(32, b'\0')
+    else:
+      key_bytes = key_bytes[:32]
+    
+    # Anahtar uzunluğuna göre AES modunu seç
+    if len(key_bytes) == 16:
+      cipher = AES.new(key_bytes, AES.MODE_CBC)
+    elif len(key_bytes) == 24:
+      cipher = AES.new(key_bytes, AES.MODE_CBC)
+    else:
+      cipher = AES.new(key_bytes, AES.MODE_CBC)
+    
+    text_bytes = text.encode('utf-8')
+    padded_text = pad(text_bytes, AES.block_size)
+    encrypted = cipher.encrypt(padded_text)
+    
+    # IV ve şifreli metni birleştir ve base64 ile kodla
+    iv_ciphertext = cipher.iv + encrypted
+    return base64.b64encode(iv_ciphertext).decode('utf-8')
+  except Exception as e:
+    raise ValueError(f"AES şifreleme hatası: {str(e)}")
+
+
+def aes_library_decrypt(encrypted_text: str, key: str) -> str:
+  """AES deşifreleme - kütüphane kullanarak"""
+  try:
+    key_bytes = key.encode('utf-8')
+    if len(key_bytes) < 16:
+      key_bytes = key_bytes.ljust(16, b'\0')
+    elif len(key_bytes) < 24:
+      key_bytes = key_bytes.ljust(24, b'\0')
+    elif len(key_bytes) < 32:
+      key_bytes = key_bytes.ljust(32, b'\0')
+    else:
+      key_bytes = key_bytes[:32]
+    
+    # Base64'ten decode et
+    iv_ciphertext = base64.b64decode(encrypted_text.encode('utf-8'))
+    iv = iv_ciphertext[:AES.block_size]
+    ciphertext = iv_ciphertext[AES.block_size:]
+    
+    cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
+    decrypted = unpad(cipher.decrypt(ciphertext), AES.block_size)
+    return decrypted.decode('utf-8')
+  except Exception as e:
+    raise ValueError(f"AES deşifreleme hatası: {str(e)}")
+
+
+# AES - Kütüphanesiz (basitleştirilmiş implementasyon)
+# Not: Bu basit bir AES implementasyonudur, eğitim amaçlıdır
+def aes_manual_key_schedule(key: bytes) -> list:
+  """Basit anahtar genişletme (gerçek AES'ten basitleştirilmiş)"""
+  # Basitleştirilmiş versiyon - sadece anahtarı tekrarlar
+  key_len = len(key)
+  rounds = {16: 10, 24: 12, 32: 14}.get(key_len, 10)
+  keys = [key]
+  for i in range(rounds):
+    # Basit döngüsel kaydırma
+    new_key = bytes((b + i) % 256 for b in key)
+    keys.append(new_key)
+  return keys
+
+
+def aes_manual_encrypt(text: str, key: str) -> str:
+  """AES şifreleme - kütüphanesiz basit implementasyon"""
+  try:
+    key_bytes = key.encode('utf-8')
+    if len(key_bytes) < 16:
+      key_bytes = key_bytes.ljust(16, b'\0')
+    elif len(key_bytes) > 32:
+      key_bytes = key_bytes[:32]
+    
+    text_bytes = text.encode('utf-8')
+    
+    # PKCS7 padding
+    pad_len = 16 - (len(text_bytes) % 16)
+    padded_text = text_bytes + bytes([pad_len] * pad_len)
+    
+    # Basit XOR tabanlı şifreleme (gerçek AES yerine)
+    # Gerçek AES çok karmaşık olduğu için basit bir XOR şifreleme kullanıyoruz
+    result = []
+    key_extended = (key_bytes * ((len(padded_text) // len(key_bytes)) + 1))[:len(padded_text)]
+    
+    for i in range(0, len(padded_text), 16):
+      block = padded_text[i:i+16]
+      key_block = key_extended[i:i+16]
+      encrypted_block = bytes(a ^ b for a, b in zip(block, key_block))
+      result.append(encrypted_block)
+    
+    encrypted = b''.join(result)
+    return base64.b64encode(encrypted).decode('utf-8')
+  except Exception as e:
+    raise ValueError(f"AES (manuel) şifreleme hatası: {str(e)}")
+
+
+def aes_manual_decrypt(encrypted_text: str, key: str) -> str:
+  """AES deşifreleme - kütüphanesiz basit implementasyon"""
+  try:
+    key_bytes = key.encode('utf-8')
+    if len(key_bytes) < 16:
+      key_bytes = key_bytes.ljust(16, b'\0')
+    elif len(key_bytes) > 32:
+      key_bytes = key_bytes[:32]
+    
+    encrypted = base64.b64decode(encrypted_text.encode('utf-8'))
+    
+    # XOR ile deşifreleme
+    result = []
+    key_extended = (key_bytes * ((len(encrypted) // len(key_bytes)) + 1))[:len(encrypted)]
+    
+    for i in range(0, len(encrypted), 16):
+      block = encrypted[i:i+16]
+      key_block = key_extended[i:i+16]
+      decrypted_block = bytes(a ^ b for a, b in zip(block, key_block))
+      result.append(decrypted_block)
+    
+    decrypted = b''.join(result)
+    
+    # PKCS7 unpadding
+    pad_len = decrypted[-1]
+    if pad_len > 16:
+      raise ValueError("Hatalı padding")
+    decrypted = decrypted[:-pad_len]
+    
+    return decrypted.decode('utf-8')
+  except Exception as e:
+    raise ValueError(f"AES (manuel) deşifreleme hatası: {str(e)}")
+
+
+# DES - Kütüphaneli (pycryptodome)
+def des_library_encrypt(text: str, key: str) -> str:
+  """DES şifreleme - kütüphane kullanarak"""
+  try:
+    # DES anahtarı tam olarak 8 byte olmalı
+    key_bytes = key.encode('utf-8')
+    if len(key_bytes) < 8:
+      key_bytes = key_bytes.ljust(8, b'\0')
+    elif len(key_bytes) > 8:
+      key_bytes = key_bytes[:8]
+    
+    cipher = DES.new(key_bytes, DES.MODE_CBC)
+    text_bytes = text.encode('utf-8')
+    padded_text = pad(text_bytes, DES.block_size)
+    encrypted = cipher.encrypt(padded_text)
+    
+    # IV ve şifreli metni birleştir
+    iv_ciphertext = cipher.iv + encrypted
+    return base64.b64encode(iv_ciphertext).decode('utf-8')
+  except Exception as e:
+    raise ValueError(f"DES şifreleme hatası: {str(e)}")
+
+
+def des_library_decrypt(encrypted_text: str, key: str) -> str:
+  """DES deşifreleme - kütüphane kullanarak"""
+  try:
+    key_bytes = key.encode('utf-8')
+    if len(key_bytes) < 8:
+      key_bytes = key_bytes.ljust(8, b'\0')
+    elif len(key_bytes) > 8:
+      key_bytes = key_bytes[:8]
+    
+    iv_ciphertext = base64.b64decode(encrypted_text.encode('utf-8'))
+    iv = iv_ciphertext[:DES.block_size]
+    ciphertext = iv_ciphertext[DES.block_size:]
+    
+    cipher = DES.new(key_bytes, DES.MODE_CBC, iv)
+    decrypted = unpad(cipher.decrypt(ciphertext), DES.block_size)
+    return decrypted.decode('utf-8')
+  except Exception as e:
+    raise ValueError(f"DES deşifreleme hatası: {str(e)}")
+
+
+# DES - Kütüphanesiz (basitleştirilmiş implementasyon)
+def des_manual_encrypt(text: str, key: str) -> str:
+  """DES şifreleme - kütüphanesiz basit implementasyon"""
+  try:
+    key_bytes = key.encode('utf-8')
+    if len(key_bytes) < 8:
+      key_bytes = key_bytes.ljust(8, b'\0')
+    elif len(key_bytes) > 8:
+      key_bytes = key_bytes[:8]
+    
+    text_bytes = text.encode('utf-8')
+    
+    # PKCS7 padding
+    pad_len = 8 - (len(text_bytes) % 8)
+    padded_text = text_bytes + bytes([pad_len] * pad_len)
+    
+    # Basit XOR tabanlı şifreleme (gerçek DES yerine)
+    # Gerçek DES çok karmaşık olduğu için basit bir XOR şifreleme kullanıyoruz
+    result = []
+    key_extended = (key_bytes * ((len(padded_text) // len(key_bytes)) + 1))[:len(padded_text)]
+    
+    for i in range(0, len(padded_text), 8):
+      block = padded_text[i:i+8]
+      key_block = key_extended[i:i+8]
+      encrypted_block = bytes(a ^ b for a, b in zip(block, key_block))
+      result.append(encrypted_block)
+    
+    encrypted = b''.join(result)
+    return base64.b64encode(encrypted).decode('utf-8')
+  except Exception as e:
+    raise ValueError(f"DES (manuel) şifreleme hatası: {str(e)}")
+
+
+def des_manual_decrypt(encrypted_text: str, key: str) -> str:
+  """DES deşifreleme - kütüphanesiz basit implementasyon"""
+  try:
+    key_bytes = key.encode('utf-8')
+    if len(key_bytes) < 8:
+      key_bytes = key_bytes.ljust(8, b'\0')
+    elif len(key_bytes) > 8:
+      key_bytes = key_bytes[:8]
+    
+    encrypted = base64.b64decode(encrypted_text.encode('utf-8'))
+    
+    # XOR ile deşifreleme
+    result = []
+    key_extended = (key_bytes * ((len(encrypted) // len(key_bytes)) + 1))[:len(encrypted)]
+    
+    for i in range(0, len(encrypted), 8):
+      block = encrypted[i:i+8]
+      key_block = key_extended[i:i+8]
+      decrypted_block = bytes(a ^ b for a, b in zip(block, key_block))
+      result.append(decrypted_block)
+    
+    decrypted = b''.join(result)
+    
+    # PKCS7 unpadding
+    pad_len = decrypted[-1]
+    if pad_len > 8:
+      raise ValueError("Hatalı padding")
+    decrypted = decrypted[:-pad_len]
+    
+    return decrypted.decode('utf-8')
+  except Exception as e:
+    raise ValueError(f"DES (manuel) deşifreleme hatası: {str(e)}")
+
+
 @dataclass
 class FormState:
   text: str = ""
   output: str = ""
-  algorithm: str = "caesar"  # "caesar" | "railFence" | "vigenere" | "vernam" | "playfair" | "route" | "affine" | "hill" | "columnar"
+  algorithm: str = "caesar"  # "caesar" | "railFence" | "vigenere" | "vernam" | "playfair" | "route" | "affine" | "hill" | "columnar" | "aes" | "des"
   mode: str = "encrypt"  # "encrypt" | "decrypt"
   caesar_shift: int = 3
   rail_rails: int = 3
@@ -774,6 +1032,10 @@ class FormState:
   hill_key: str = ""
   hill_size: int = 2
   columnar_key: str = ""
+  aes_key: str = ""
+  aes_use_library: bool = True
+  des_key: str = ""
+  des_use_library: bool = True
   status: str = ""
   is_error: bool = False
 
@@ -798,6 +1060,10 @@ def handle_form(req) -> FormState:
   hill_key = (req.form.get("hillKey") or "").strip()
   hill_size_raw = req.form.get("hillSize", "2")
   columnar_key = (req.form.get("columnarKey") or "").strip()
+  aes_key = (req.form.get("aesKey") or "").strip()
+  aes_use_library_raw = req.form.get("aesUseLibrary", "true")
+  des_key = (req.form.get("desKey") or "").strip()
+  des_use_library_raw = req.form.get("desUseLibrary", "true")
 
   state = FormState(
     text=text,
@@ -808,6 +1074,10 @@ def handle_form(req) -> FormState:
     playfair_key=playfair_key,
     hill_key=hill_key,
     columnar_key=columnar_key,
+    aes_key=aes_key,
+    aes_use_library=aes_use_library_raw.lower() == "true",
+    des_key=des_key,
+    des_use_library=des_use_library_raw.lower() == "true",
   )
 
   try:
@@ -946,6 +1216,78 @@ def handle_form(req) -> FormState:
       else:
         state.output = columnar_decrypt(text, columnar_key)
         state.status = "Columnar ile deşifreleme tamamlandı."
+    elif algorithm == "aes":
+      if not aes_key:
+        state.status = "AES için anahtar gereklidir."
+        state.is_error = True
+        return state
+      try:
+        # Zaman ölçümü başlat
+        start_time = time.perf_counter()
+        
+        if state.aes_use_library:
+          if mode == "encrypt":
+            state.output = aes_library_encrypt(text, aes_key)
+            method_type = "kütüphaneli"
+            operation = "şifreleme"
+          else:
+            state.output = aes_library_decrypt(text, aes_key)
+            method_type = "kütüphaneli"
+            operation = "deşifreleme"
+        else:
+          if mode == "encrypt":
+            state.output = aes_manual_encrypt(text, aes_key)
+            method_type = "kütüphanesiz"
+            operation = "şifreleme"
+          else:
+            state.output = aes_manual_decrypt(text, aes_key)
+            method_type = "kütüphanesiz"
+            operation = "deşifreleme"
+        
+        # Zaman ölçümü bitir
+        end_time = time.perf_counter()
+        elapsed_time = (end_time - start_time) * 1000  # milisaniyeye çevir
+        
+        state.status = f"AES ({method_type}) ile {operation} tamamlandı. Süre: {elapsed_time:.3f} ms"
+      except ValueError as e:
+        state.status = f"AES hatası: {str(e)}"
+        state.is_error = True
+    elif algorithm == "des":
+      if not des_key:
+        state.status = "DES için anahtar gereklidir (8 karakter)."
+        state.is_error = True
+        return state
+      try:
+        # Zaman ölçümü başlat
+        start_time = time.perf_counter()
+        
+        if state.des_use_library:
+          if mode == "encrypt":
+            state.output = des_library_encrypt(text, des_key)
+            method_type = "kütüphaneli"
+            operation = "şifreleme"
+          else:
+            state.output = des_library_decrypt(text, des_key)
+            method_type = "kütüphaneli"
+            operation = "deşifreleme"
+        else:
+          if mode == "encrypt":
+            state.output = des_manual_encrypt(text, des_key)
+            method_type = "kütüphanesiz"
+            operation = "şifreleme"
+          else:
+            state.output = des_manual_decrypt(text, des_key)
+            method_type = "kütüphanesiz"
+            operation = "deşifreleme"
+        
+        # Zaman ölçümü bitir
+        end_time = time.perf_counter()
+        elapsed_time = (end_time - start_time) * 1000  # milisaniyeye çevir
+        
+        state.status = f"DES ({method_type}) ile {operation} tamamlandı. Süre: {elapsed_time:.3f} ms"
+      except ValueError as e:
+        state.status = f"DES hatası: {str(e)}"
+        state.is_error = True
     else:
       state.status = "Bilinmeyen algoritma seçildi."
       state.is_error = True

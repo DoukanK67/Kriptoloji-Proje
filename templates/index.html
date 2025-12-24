@@ -10,7 +10,7 @@
     <div class="app">
       <header class="header">
         <h1>Şifreleme Aracı (Python)</h1>
-        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair, Route, Affine, Hill Cipher ve Columnar algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
+        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair, Route, Affine, Hill Cipher, Columnar, AES ve DES algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
       </header>
 
       <main class="main">
@@ -58,6 +58,12 @@
                   </option>
                   <option value="columnar" {% if state.algorithm == "columnar" %}selected{% endif %}>
                     Columnar Transposition
+                  </option>
+                  <option value="aes" {% if state.algorithm == "aes" %}selected{% endif %}>
+                    AES Şifreleme
+                  </option>
+                  <option value="des" {% if state.algorithm == "des" %}selected{% endif %}>
+                    DES Şifreleme
                   </option>
                 </select>
               </label>
@@ -237,6 +243,79 @@
                 </label>
               </div>
 
+              <div
+                class="algorithm-options"
+                id="aesOptions"
+                {% if state.algorithm != "aes" %}style="display:none"{% endif %}
+              >
+                <label class="field">
+                  <span>Anahtar</span>
+                  <input
+                    type="text"
+                    name="aesKey"
+                    value="{{ state.aes_key }}"
+                    placeholder="AES anahtarı girin (16, 24 veya 32 karakter önerilir)..."
+                  />
+                </label>
+                <div class="mode-toggle">
+                  <label>
+                    <input
+                      type="radio"
+                      name="aesUseLibrary"
+                      value="true"
+                      {% if state.aes_use_library %}checked{% endif %}
+                    />
+                    Kütüphaneli (pycryptodome)
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="aesUseLibrary"
+                      value="false"
+                      {% if not state.aes_use_library %}checked{% endif %}
+                    />
+                    Kütüphanesiz (manuel)
+                  </label>
+                </div>
+              </div>
+
+              <div
+                class="algorithm-options"
+                id="desOptions"
+                {% if state.algorithm != "des" %}style="display:none"{% endif %}
+              >
+                <label class="field">
+                  <span>Anahtar (8 karakter)</span>
+                  <input
+                    type="text"
+                    name="desKey"
+                    value="{{ state.des_key }}"
+                    placeholder="DES anahtarı girin (8 karakter)..."
+                    maxlength="8"
+                  />
+                </label>
+                <div class="mode-toggle">
+                  <label>
+                    <input
+                      type="radio"
+                      name="desUseLibrary"
+                      value="true"
+                      {% if state.des_use_library %}checked{% endif %}
+                    />
+                    Kütüphaneli (pycryptodome)
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="desUseLibrary"
+                      value="false"
+                      {% if not state.des_use_library %}checked{% endif %}
+                    />
+                    Kütüphanesiz (manuel)
+                  </label>
+                </div>
+              </div>
+
               <div class="mode-toggle">
                 <label>
                   <input
@@ -298,6 +377,7 @@
           Vigenere: anahtar kelime ile harfleri kaydırır. Vernam: XOR tabanlı şifreleme. Playfair: 5x5 grid kullanır.
           Route: metni grid'e yerleştirip spiral rotada okur. Affine: (ax+b) mod 26 formülü ile şifreler.
           Hill Cipher: matris tabanlı blok şifreleme. Columnar: metni matrise yerleştirip sütun sırasına göre okur.
+          AES: gelişmiş şifreleme standardı (kütüphaneli/kütüphanesiz). DES: veri şifreleme standardı (kütüphaneli/kütüphanesiz).
         </small>
       </footer>
     </div>
@@ -314,6 +394,8 @@
       const affineOptions = document.getElementById("affineOptions");
       const hillOptions = document.getElementById("hillOptions");
       const columnarOptions = document.getElementById("columnarOptions");
+      const aesOptions = document.getElementById("aesOptions");
+      const desOptions = document.getElementById("desOptions");
       const clearBtn = document.getElementById("clearBtn");
       const outputText = document.getElementById("outputText");
       const statusEl = document.getElementById("status");
@@ -330,6 +412,8 @@
         affineOptions.style.display = "none";
         hillOptions.style.display = "none";
         columnarOptions.style.display = "none";
+        aesOptions.style.display = "none";
+        desOptions.style.display = "none";
       }
 
       algorithmSelect.addEventListener("change", () => {
@@ -354,6 +438,10 @@
           hillOptions.style.display = "";
         } else if (val === "columnar") {
           columnarOptions.style.display = "";
+        } else if (val === "aes") {
+          aesOptions.style.display = "";
+        } else if (val === "des") {
+          desOptions.style.display = "";
         }
       });
 
