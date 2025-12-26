@@ -10,7 +10,7 @@
     <div class="app">
       <header class="header">
         <h1>Şifreleme Aracı (Python)</h1>
-        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair, Route, Affine, Hill Cipher, Columnar, AES ve DES algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
+        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair, Route, Affine, Hill Cipher, Columnar, AES, DES ve RSA algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
       </header>
 
       <main class="main">
@@ -64,6 +64,9 @@
                   </option>
                   <option value="des" {% if state.algorithm == "des" %}selected{% endif %}>
                     DES Şifreleme
+                  </option>
+                  <option value="rsa" {% if state.algorithm == "rsa" %}selected{% endif %}>
+                    RSA Şifreleme
                   </option>
                 </select>
               </label>
@@ -316,6 +319,63 @@
                 </div>
               </div>
 
+              <div
+                class="algorithm-options"
+                id="rsaOptions"
+                {% if state.algorithm != "rsa" %}style="display:none"{% endif %}
+              >
+                <label class="field inline">
+                  <span>Anahtar Boyutu (bit)</span>
+                  <input
+                    type="number"
+                    name="rsaKeySize"
+                    value="{{ state.rsa_key_size }}"
+                    min="512"
+                    max="4096"
+                    step="512"
+                  />
+                </label>
+                <label class="field">
+                  <span>Public Key (Şifreleme için)</span>
+                  <textarea
+                    name="rsaPublicKey"
+                    rows="4"
+                    placeholder="Public key'i buraya yapıştırın veya 'Anahtar Oluştur' butonuna basın..."
+                  >{{ state.rsa_public_key }}</textarea>
+                </label>
+                <label class="field">
+                  <span>Private Key (Deşifreleme için)</span>
+                  <textarea
+                    name="rsaPrivateKey"
+                    rows="4"
+                    placeholder="Private key'i buraya yapıştırın..."
+                  >{{ state.rsa_private_key }}</textarea>
+                </label>
+                <div class="mode-toggle">
+                  <label>
+                    <input
+                      type="radio"
+                      name="rsaUseLibrary"
+                      value="true"
+                      {% if state.rsa_use_library %}checked{% endif %}
+                    />
+                    Kütüphaneli (pycryptodome)
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="rsaUseLibrary"
+                      value="false"
+                      {% if not state.rsa_use_library %}checked{% endif %}
+                    />
+                    Kütüphanesiz (manuel)
+                  </label>
+                </div>
+                <button type="button" id="generateRsaKeysBtn" class="secondary" style="margin-top: 10px;">
+                  Anahtar Çifti Oluştur
+                </button>
+              </div>
+
               <div class="mode-toggle">
                 <label>
                   <input
@@ -378,6 +438,7 @@
           Route: metni grid'e yerleştirip spiral rotada okur. Affine: (ax+b) mod 26 formülü ile şifreler.
           Hill Cipher: matris tabanlı blok şifreleme. Columnar: metni matrise yerleştirip sütun sırasına göre okur.
           AES: gelişmiş şifreleme standardı (kütüphaneli/kütüphanesiz). DES: veri şifreleme standardı (kütüphaneli/kütüphanesiz).
+          RSA: asimetrik şifreleme algoritması (public/private key çifti kullanır, kütüphaneli/kütüphanesiz).
         </small>
       </footer>
     </div>
@@ -396,7 +457,9 @@
       const columnarOptions = document.getElementById("columnarOptions");
       const aesOptions = document.getElementById("aesOptions");
       const desOptions = document.getElementById("desOptions");
+      const rsaOptions = document.getElementById("rsaOptions");
       const clearBtn = document.getElementById("clearBtn");
+      const generateRsaKeysBtn = document.getElementById("generateRsaKeysBtn");
       const outputText = document.getElementById("outputText");
       const statusEl = document.getElementById("status");
       const copyBtn = document.getElementById("copyBtn");
@@ -414,6 +477,7 @@
         columnarOptions.style.display = "none";
         aesOptions.style.display = "none";
         desOptions.style.display = "none";
+        rsaOptions.style.display = "none";
       }
 
       algorithmSelect.addEventListener("change", () => {
@@ -442,8 +506,50 @@
           aesOptions.style.display = "";
         } else if (val === "des") {
           desOptions.style.display = "";
+        } else if (val === "rsa") {
+          rsaOptions.style.display = "";
         }
       });
+
+      // RSA anahtar oluştur butonu
+      if (generateRsaKeysBtn) {
+        generateRsaKeysBtn.addEventListener("click", async () => {
+          const keySize = document.querySelector('input[name="rsaKeySize"]').value || "2048";
+          const useLibrary = document.querySelector('input[name="rsaUseLibrary"]:checked').value === "true";
+          
+          const formData = new FormData();
+          formData.append("keySize", keySize);
+          formData.append("useLibrary", useLibrary);
+          
+          try {
+            generateRsaKeysBtn.disabled = true;
+            generateRsaKeysBtn.textContent = "Oluşturuluyor...";
+            
+            const response = await fetch("/generate-rsa-keys", {
+              method: "POST",
+              body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+              document.querySelector('textarea[name="rsaPublicKey"]').value = data.public_key;
+              document.querySelector('textarea[name="rsaPrivateKey"]').value = data.private_key;
+              statusEl.textContent = "RSA anahtar çifti başarıyla oluşturuldu.";
+              statusEl.style.color = "#9ca3af";
+            } else {
+              statusEl.textContent = `Anahtar oluşturma hatası: ${data.error}`;
+              statusEl.style.color = "#f87171";
+            }
+          } catch (error) {
+            statusEl.textContent = `Anahtar oluşturma hatası: ${error.message}`;
+            statusEl.style.color = "#f87171";
+          } finally {
+            generateRsaKeysBtn.disabled = false;
+            generateRsaKeysBtn.textContent = "Anahtar Çifti Oluştur";
+          }
+        });
+      }
 
       // Sayfa yüklendiğinde doğru seçeneği göster
       window.addEventListener("DOMContentLoaded", () => {
