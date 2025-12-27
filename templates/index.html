@@ -10,7 +10,7 @@
     <div class="app">
       <header class="header">
         <h1>Şifreleme Aracı (Python)</h1>
-        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair, Route, Affine, Hill Cipher, Columnar, AES, DES ve RSA algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
+        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair, Route, Affine, Hill Cipher, Columnar, AES, DES, RSA ve DSA algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
       </header>
 
       <main class="main">
@@ -67,6 +67,9 @@
                   </option>
                   <option value="rsa" {% if state.algorithm == "rsa" %}selected{% endif %}>
                     RSA Şifreleme
+                  </option>
+                  <option value="dsa" {% if state.algorithm == "dsa" %}selected{% endif %}>
+                    DSA (Dijital İmza)
                   </option>
                 </select>
               </label>
@@ -376,6 +379,63 @@
                 </button>
               </div>
 
+              <div
+                class="algorithm-options"
+                id="dsaOptions"
+                {% if state.algorithm != "dsa" %}style="display:none"{% endif %}
+              >
+                <label class="field inline">
+                  <span>Anahtar Boyutu (bit)</span>
+                  <select name="dsaKeySize">
+                    <option value="1024" {% if state.dsa_key_size == 1024 %}selected{% endif %}>1024</option>
+                    <option value="2048" {% if state.dsa_key_size == 2048 %}selected{% endif %}>2048</option>
+                    <option value="3072" {% if state.dsa_key_size == 3072 %}selected{% endif %}>3072</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Public Key (İmza Doğrulama için)</span>
+                  <textarea
+                    name="dsaPublicKey"
+                    rows="4"
+                    placeholder="Public key'i buraya yapıştırın veya 'Anahtar Oluştur' butonuna basın..."
+                  >{{ state.dsa_public_key }}</textarea>
+                </label>
+                <label class="field">
+                  <span>Private Key (İmza Oluşturma için)</span>
+                  <textarea
+                    name="dsaPrivateKey"
+                    rows="4"
+                    placeholder="Private key'i buraya yapıştırın..."
+                  >{{ state.dsa_private_key }}</textarea>
+                </label>
+                <div class="mode-toggle">
+                  <label>
+                    <input
+                      type="radio"
+                      name="dsaUseLibrary"
+                      value="true"
+                      {% if state.dsa_use_library %}checked{% endif %}
+                    />
+                    Kütüphaneli (pycryptodome)
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="dsaUseLibrary"
+                      value="false"
+                      {% if not state.dsa_use_library %}checked{% endif %}
+                    />
+                    Kütüphanesiz (manuel)
+                  </label>
+                </div>
+                <button type="button" id="generateDsaKeysBtn" class="secondary" style="margin-top: 10px;">
+                  Anahtar Çifti Oluştur
+                </button>
+                <p style="font-size: 0.85rem; color: #9ca3af; margin-top: 8px;">
+                  Not: DSA bir dijital imza algoritmasıdır. "Şifrele" = İmza Oluştur, "Deşifre Et" = İmza Doğrula
+                </p>
+              </div>
+
               <div class="mode-toggle">
                 <label>
                   <input
@@ -439,6 +499,7 @@
           Hill Cipher: matris tabanlı blok şifreleme. Columnar: metni matrise yerleştirip sütun sırasına göre okur.
           AES: gelişmiş şifreleme standardı (kütüphaneli/kütüphanesiz). DES: veri şifreleme standardı (kütüphaneli/kütüphanesiz).
           RSA: asimetrik şifreleme algoritması (public/private key çifti kullanır, kütüphaneli/kütüphanesiz).
+          DSA: dijital imza algoritması (imza oluşturma ve doğrulama, kütüphaneli/kütüphanesiz).
         </small>
       </footer>
     </div>
@@ -458,8 +519,10 @@
       const aesOptions = document.getElementById("aesOptions");
       const desOptions = document.getElementById("desOptions");
       const rsaOptions = document.getElementById("rsaOptions");
+      const dsaOptions = document.getElementById("dsaOptions");
       const clearBtn = document.getElementById("clearBtn");
       const generateRsaKeysBtn = document.getElementById("generateRsaKeysBtn");
+      const generateDsaKeysBtn = document.getElementById("generateDsaKeysBtn");
       const outputText = document.getElementById("outputText");
       const statusEl = document.getElementById("status");
       const copyBtn = document.getElementById("copyBtn");
@@ -478,6 +541,7 @@
         aesOptions.style.display = "none";
         desOptions.style.display = "none";
         rsaOptions.style.display = "none";
+        dsaOptions.style.display = "none";
       }
 
       algorithmSelect.addEventListener("change", () => {
@@ -508,6 +572,8 @@
           desOptions.style.display = "";
         } else if (val === "rsa") {
           rsaOptions.style.display = "";
+        } else if (val === "dsa") {
+          dsaOptions.style.display = "";
         }
       });
 
@@ -547,6 +613,46 @@
           } finally {
             generateRsaKeysBtn.disabled = false;
             generateRsaKeysBtn.textContent = "Anahtar Çifti Oluştur";
+          }
+        });
+      }
+
+      // DSA anahtar oluştur butonu
+      if (generateDsaKeysBtn) {
+        generateDsaKeysBtn.addEventListener("click", async () => {
+          const keySize = document.querySelector('select[name="dsaKeySize"]').value || "2048";
+          const useLibrary = document.querySelector('input[name="dsaUseLibrary"]:checked').value === "true";
+          
+          const formData = new FormData();
+          formData.append("keySize", keySize);
+          formData.append("useLibrary", useLibrary);
+          
+          try {
+            generateDsaKeysBtn.disabled = true;
+            generateDsaKeysBtn.textContent = "Oluşturuluyor...";
+            
+            const response = await fetch("/generate-dsa-keys", {
+              method: "POST",
+              body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+              document.querySelector('textarea[name="dsaPublicKey"]').value = data.public_key;
+              document.querySelector('textarea[name="dsaPrivateKey"]').value = data.private_key;
+              statusEl.textContent = "DSA anahtar çifti başarıyla oluşturuldu.";
+              statusEl.style.color = "#9ca3af";
+            } else {
+              statusEl.textContent = `Anahtar oluşturma hatası: ${data.error}`;
+              statusEl.style.color = "#f87171";
+            }
+          } catch (error) {
+            statusEl.textContent = `Anahtar oluşturma hatası: ${error.message}`;
+            statusEl.style.color = "#f87171";
+          } finally {
+            generateDsaKeysBtn.disabled = false;
+            generateDsaKeysBtn.textContent = "Anahtar Çifti Oluştur";
           }
         });
       }

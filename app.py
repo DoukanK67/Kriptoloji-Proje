@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 from Crypto.Cipher import AES, DES, PKCS1_OAEP
-from Crypto.PublicKey import RSA
+from Crypto.PublicKey import RSA, DSA
+from Crypto.Signature import DSS
+from Crypto.Hash import SHA256
 from Crypto.Util.Padding import pad, unpad
 from flask import Flask, render_template, request
 
@@ -1222,11 +1224,228 @@ def rsa_manual_decrypt(encrypted_text: str, private_key: tuple[int, int]) -> str
     raise ValueError(f"RSA (manuel) deşifreleme hatası: {str(e)}")
 
 
+# -----------------------------
+#  DSA (Digital Signature Algorithm)
+# -----------------------------
+
+# DSA - Kütüphaneli (pycryptodome)
+def dsa_library_generate_keys(key_size: int = 2048) -> tuple[bytes, bytes]:
+  """DSA anahtar çifti oluşturur (public key, private key)"""
+  if key_size < 1024:
+    key_size = 1024
+  elif key_size > 3072:
+    key_size = 3072
+  
+  # DSA key_size 1024, 2048 veya 3072 olmalı
+  if key_size not in [1024, 2048, 3072]:
+    if key_size < 1536:
+      key_size = 1024
+    elif key_size < 2560:
+      key_size = 2048
+    else:
+      key_size = 3072
+  
+  key = DSA.generate(key_size)
+  private_key = key.export_key()
+  public_key = key.publickey().export_key()
+  return public_key, private_key
+
+
+def dsa_library_sign(text: str, private_key_pem: str) -> str:
+  """DSA ile dijital imza oluşturur"""
+  try:
+    # Private key'i yükle
+    if isinstance(private_key_pem, str):
+      private_key = DSA.import_key(private_key_pem.encode('utf-8'))
+    else:
+      private_key = DSA.import_key(private_key_pem)
+    
+    # Metnin hash'ini al
+    text_bytes = text.encode('utf-8')
+    hash_obj = SHA256.new(text_bytes)
+    
+    # İmza oluştur
+    signer = DSS.new(private_key, 'fips-186-3')
+    signature = signer.sign(hash_obj)
+    
+    # İmza ve metni birleştir (format: base64(metin)||base64(imza))
+    text_b64 = base64.b64encode(text_bytes).decode('utf-8')
+    signature_b64 = base64.b64encode(signature).decode('utf-8')
+    return f"{text_b64}||{signature_b64}"
+  except Exception as e:
+    raise ValueError(f"DSA imza oluşturma hatası: {str(e)}")
+
+
+def dsa_library_verify(signed_data: str, public_key_pem: str) -> str:
+  """DSA ile dijital imzayı doğrular"""
+  try:
+    # Public key'i yükle
+    if isinstance(public_key_pem, str):
+      public_key = DSA.import_key(public_key_pem.encode('utf-8'))
+    else:
+      public_key = DSA.import_key(public_key_pem)
+    
+    # İmzalı veriyi parse et
+    if "||" not in signed_data:
+      raise ValueError("Geçersiz imzalı veri formatı")
+    
+    text_b64, signature_b64 = signed_data.split("||", 1)
+    text_bytes = base64.b64decode(text_b64.encode('utf-8'))
+    signature = base64.b64decode(signature_b64.encode('utf-8'))
+    
+    # Metnin hash'ini al
+    hash_obj = SHA256.new(text_bytes)
+    
+    # İmzayı doğrula
+    verifier = DSS.new(public_key, 'fips-186-3')
+    try:
+      verifier.verify(hash_obj, signature)
+      return text_bytes.decode('utf-8')
+    except ValueError:
+      raise ValueError("İmza doğrulama başarısız - imza geçersiz")
+  except Exception as e:
+    raise ValueError(f"DSA imza doğrulama hatası: {str(e)}")
+
+
+# DSA - Kütüphanesiz (basitleştirilmiş implementasyon)
+def dsa_manual_generate_keys(key_size: int = 1024) -> tuple[dict, dict]:
+  """Basit DSA anahtar çifti oluşturur (eğitim amaçlı)"""
+  # Basitleştirilmiş DSA parametreleri
+  # Gerçek DSA çok daha karmaşıktır
+  import random
+  
+  # Küçük asal sayılar (gerçek DSA'da çok daha büyük)
+  q_primes = [101, 103, 107, 109, 113, 127, 131, 137, 139, 149]
+  q = random.choice(q_primes)
+  
+  # p = q * k + 1 (basitleştirilmiş)
+  k = random.randint(10, 50)
+  p = q * k + 1
+  while not rsa_manual_is_prime(p):
+    k += 1
+    p = q * k + 1
+    if p > 10000:  # Limit
+      p = 101 * 20 + 1
+      break
+  
+  # g seç (generator)
+  g = 2
+  while rsa_manual_mod_pow(g, (p - 1) // q, p) == 1:
+    g += 1
+    if g > 100:  # Limit
+      g = 3
+      break
+  
+  # Private key: x (1 < x < q)
+  x = random.randint(2, q - 1)
+  
+  # Public key: y = g^x mod p
+  y = rsa_manual_mod_pow(g, x, p)
+  
+  private_key = {"p": p, "q": q, "g": g, "x": x}
+  public_key = {"p": p, "q": q, "g": g, "y": y}
+  
+  return public_key, private_key
+
+
+def dsa_manual_sign(text: str, private_key: dict) -> str:
+  """DSA ile dijital imza oluşturur - kütüphanesiz"""
+  try:
+    p = private_key["p"]
+    q = private_key["q"]
+    g = private_key["g"]
+    x = private_key["x"]
+    
+    text_bytes = text.encode('utf-8')
+    # Basit hash (gerçekte SHA kullanılır)
+    h = hash(text_bytes) % q
+    if h == 0:
+      h = 1
+    
+    import random
+    k = random.randint(1, q - 1)
+    
+    # r = (g^k mod p) mod q
+    r = rsa_manual_mod_pow(g, k, p) % q
+    if r == 0:
+      r = 1
+    
+    # s = k^(-1) * (h + x*r) mod q
+    k_inv = mod_inverse(k, q)
+    if k_inv is None:
+      raise ValueError("k'nin modüler tersi bulunamadı")
+    
+    s = (k_inv * (h + x * r)) % q
+    if s == 0:
+      s = 1
+    
+    # İmza ve metni birleştir
+    text_b64 = base64.b64encode(text_bytes).decode('utf-8')
+    signature_str = f"{r},{s}"
+    signature_b64 = base64.b64encode(signature_str.encode('utf-8')).decode('utf-8')
+    return f"{text_b64}||{signature_b64}"
+  except Exception as e:
+    raise ValueError(f"DSA (manuel) imza oluşturma hatası: {str(e)}")
+
+
+def dsa_manual_verify(signed_data: str, public_key: dict) -> str:
+  """DSA ile dijital imzayı doğrular - kütüphanesiz"""
+  try:
+    p = public_key["p"]
+    q = public_key["q"]
+    g = public_key["g"]
+    y = public_key["y"]
+    
+    # İmzalı veriyi parse et
+    if "||" not in signed_data:
+      raise ValueError("Geçersiz imzalı veri formatı")
+    
+    text_b64, signature_b64 = signed_data.split("||", 1)
+    text_bytes = base64.b64decode(text_b64.encode('utf-8'))
+    signature_str = base64.b64decode(signature_b64.encode('utf-8')).decode('utf-8')
+    
+    r_str, s_str = signature_str.split(",")
+    r = int(r_str)
+    s = int(s_str)
+    
+    if not (0 < r < q) or not (0 < s < q):
+      raise ValueError("İmza değerleri geçersiz")
+    
+    # Basit hash
+    h = hash(text_bytes) % q
+    if h == 0:
+      h = 1
+    
+    # w = s^(-1) mod q
+    w = mod_inverse(s, q)
+    if w is None:
+      raise ValueError("s'nin modüler tersi bulunamadı")
+    
+    # u1 = (h * w) mod q
+    u1 = (h * w) % q
+    
+    # u2 = (r * w) mod q
+    u2 = (r * w) % q
+    
+    # v = ((g^u1 * y^u2) mod p) mod q
+    g_u1 = rsa_manual_mod_pow(g, u1, p)
+    y_u2 = rsa_manual_mod_pow(y, u2, p)
+    v = ((g_u1 * y_u2) % p) % q
+    
+    # v == r ise imza geçerli
+    if v != r:
+      raise ValueError("İmza doğrulama başarısız - imza geçersiz")
+    
+    return text_bytes.decode('utf-8')
+  except Exception as e:
+    raise ValueError(f"DSA (manuel) imza doğrulama hatası: {str(e)}")
+
+
 @dataclass
 class FormState:
   text: str = ""
   output: str = ""
-  algorithm: str = "caesar"  # "caesar" | "railFence" | "vigenere" | "vernam" | "playfair" | "route" | "affine" | "hill" | "columnar" | "aes" | "des" | "rsa"
+  algorithm: str = "caesar"  # "caesar" | "railFence" | "vigenere" | "vernam" | "playfair" | "route" | "affine" | "hill" | "columnar" | "aes" | "des" | "rsa" | "dsa"
   mode: str = "encrypt"  # "encrypt" | "decrypt"
   caesar_shift: int = 3
   rail_rails: int = 3
@@ -1248,6 +1467,10 @@ class FormState:
   rsa_public_key: str = ""
   rsa_private_key: str = ""
   rsa_use_library: bool = True
+  dsa_key_size: int = 2048
+  dsa_public_key: str = ""
+  dsa_private_key: str = ""
+  dsa_use_library: bool = True
   status: str = ""
   is_error: bool = False
 
@@ -1280,6 +1503,10 @@ def handle_form(req) -> FormState:
   rsa_public_key = (req.form.get("rsaPublicKey") or "").strip()
   rsa_private_key = (req.form.get("rsaPrivateKey") or "").strip()
   rsa_use_library_raw = req.form.get("rsaUseLibrary", "true")
+  dsa_key_size_raw = req.form.get("dsaKeySize", "2048")
+  dsa_public_key = (req.form.get("dsaPublicKey") or "").strip()
+  dsa_private_key = (req.form.get("dsaPrivateKey") or "").strip()
+  dsa_use_library_raw = req.form.get("dsaUseLibrary", "true")
 
   state = FormState(
     text=text,
@@ -1297,6 +1524,9 @@ def handle_form(req) -> FormState:
     rsa_public_key=rsa_public_key,
     rsa_private_key=rsa_private_key,
     rsa_use_library=rsa_use_library_raw.lower() == "true",
+    dsa_public_key=dsa_public_key,
+    dsa_private_key=dsa_private_key,
+    dsa_use_library=dsa_use_library_raw.lower() == "true",
   )
   
   try:
@@ -1307,6 +1537,23 @@ def handle_form(req) -> FormState:
       state.rsa_key_size = 4096
   except ValueError:
     state.rsa_key_size = 2048
+  
+  try:
+    state.dsa_key_size = int(dsa_key_size_raw)
+    if state.dsa_key_size < 1024:
+      state.dsa_key_size = 1024
+    elif state.dsa_key_size > 3072:
+      state.dsa_key_size = 3072
+    # DSA için sadece 1024, 2048, 3072 geçerli
+    if state.dsa_key_size not in [1024, 2048, 3072]:
+      if state.dsa_key_size < 1536:
+        state.dsa_key_size = 1024
+      elif state.dsa_key_size < 2560:
+        state.dsa_key_size = 2048
+      else:
+        state.dsa_key_size = 3072
+  except ValueError:
+    state.dsa_key_size = 2048
 
   try:
     state.caesar_shift = int(caesar_shift_raw)
@@ -1577,6 +1824,72 @@ def handle_form(req) -> FormState:
       except Exception as e:
         state.status = f"RSA hatası: {str(e)}"
         state.is_error = True
+    elif algorithm == "dsa":
+      try:
+        # Zaman ölçümü başlat
+        start_time = time.perf_counter()
+        
+        if state.dsa_use_library:
+          if mode == "encrypt":
+            # DSA encrypt = dijital imza oluştur
+            if not dsa_private_key:
+              state.status = "DSA imza oluşturma için private key gereklidir. Anahtar oluştur butonuna basın."
+              state.is_error = True
+              return state
+            state.output = dsa_library_sign(text, dsa_private_key)
+            method_type = "kütüphaneli"
+            operation = "imza oluşturma"
+          else:
+            # DSA decrypt = dijital imza doğrula
+            if not dsa_public_key:
+              state.status = "DSA imza doğrulama için public key gereklidir."
+              state.is_error = True
+              return state
+            state.output = dsa_library_verify(text, dsa_public_key)
+            method_type = "kütüphaneli"
+            operation = "imza doğrulama"
+        else:
+          if mode == "encrypt":
+            # DSA imza oluştur
+            if not dsa_private_key:
+              # Anahtar oluştur
+              pub_key_dict, priv_key_dict = dsa_manual_generate_keys(state.dsa_key_size)
+              # Dictionary'yi JSON benzeri string'e çevir
+              import json
+              state.dsa_public_key = json.dumps(pub_key_dict)
+              state.dsa_private_key = json.dumps(priv_key_dict)
+              priv_key = priv_key_dict
+            else:
+              # String'den dict'e çevir
+              import json
+              priv_key = json.loads(dsa_private_key)
+            state.output = dsa_manual_sign(text, priv_key)
+            method_type = "kütüphanesiz"
+            operation = "imza oluşturma"
+          else:
+            # DSA imza doğrula
+            if not dsa_public_key:
+              state.status = "DSA imza doğrulama için public key gereklidir."
+              state.is_error = True
+              return state
+            # String'den dict'e çevir
+            import json
+            pub_key = json.loads(dsa_public_key)
+            state.output = dsa_manual_verify(text, pub_key)
+            method_type = "kütüphanesiz"
+            operation = "imza doğrulama"
+        
+        # Zaman ölçümü bitir
+        end_time = time.perf_counter()
+        elapsed_time = (end_time - start_time) * 1000  # milisaniyeye çevir
+        
+        state.status = f"DSA ({method_type}) ile {operation} tamamlandı. Süre: {elapsed_time:.3f} ms"
+      except ValueError as e:
+        state.status = f"DSA hatası: {str(e)}"
+        state.is_error = True
+      except Exception as e:
+        state.status = f"DSA hatası: {str(e)}"
+        state.is_error = True
     else:
       state.status = "Bilinmeyen algoritma seçildi."
       state.is_error = True
@@ -1608,6 +1921,47 @@ def generate_rsa_keys():
         "success": True,
         "public_key": f"{pub_key_tuple[0]},{pub_key_tuple[1]}",
         "private_key": f"{priv_key_tuple[0]},{priv_key_tuple[1]}"
+      })
+  except Exception as e:
+    from flask import jsonify
+    return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/generate-dsa-keys", methods=["POST"])
+def generate_dsa_keys():
+  """DSA anahtar çifti oluşturur"""
+  from flask import jsonify
+  try:
+    key_size = int(request.form.get("keySize", "2048"))
+    use_library = request.form.get("useLibrary", "true").lower() == "true"
+    
+    # DSA key_size düzelt
+    if key_size < 1024:
+      key_size = 1024
+    elif key_size > 3072:
+      key_size = 3072
+    if key_size not in [1024, 2048, 3072]:
+      if key_size < 1536:
+        key_size = 1024
+      elif key_size < 2560:
+        key_size = 2048
+      else:
+        key_size = 3072
+    
+    if use_library:
+      public_key, private_key = dsa_library_generate_keys(key_size)
+      return jsonify({
+        "success": True,
+        "public_key": public_key.decode('utf-8'),
+        "private_key": private_key.decode('utf-8')
+      })
+    else:
+      pub_key_dict, priv_key_dict = dsa_manual_generate_keys(key_size)
+      import json
+      return jsonify({
+        "success": True,
+        "public_key": json.dumps(pub_key_dict),
+        "private_key": json.dumps(priv_key_dict)
       })
   except Exception as e:
     from flask import jsonify
