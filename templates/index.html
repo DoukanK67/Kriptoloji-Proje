@@ -354,26 +354,6 @@
                     placeholder="Private key'i buraya yapıştırın..."
                   >{{ state.rsa_private_key }}</textarea>
                 </label>
-                <div class="mode-toggle">
-                  <label>
-                    <input
-                      type="radio"
-                      name="rsaUseLibrary"
-                      value="true"
-                      {% if state.rsa_use_library %}checked{% endif %}
-                    />
-                    Kütüphaneli (pycryptodome)
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="rsaUseLibrary"
-                      value="false"
-                      {% if not state.rsa_use_library %}checked{% endif %}
-                    />
-                    Kütüphanesiz (manuel)
-                  </label>
-                </div>
                 <button type="button" id="generateRsaKeysBtn" class="secondary" style="margin-top: 10px;">
                   Anahtar Çifti Oluştur
                 </button>
@@ -581,7 +561,7 @@
       if (generateRsaKeysBtn) {
         generateRsaKeysBtn.addEventListener("click", async () => {
           const keySize = document.querySelector('input[name="rsaKeySize"]').value || "2048";
-          const useLibrary = document.querySelector('input[name="rsaUseLibrary"]:checked').value === "true";
+          const useLibrary = true; // RSA artık sadece kütüphaneli
           
           const formData = new FormData();
           formData.append("keySize", keySize);

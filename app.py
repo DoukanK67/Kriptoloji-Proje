@@ -1092,16 +1092,16 @@ def rsa_library_decrypt(encrypted_text: str, private_key_pem: str) -> str:
     raise ValueError(f"RSA deşifreleme hatası: {str(e)}")
 
 
-# RSA - Kütüphanesiz (basitleştirilmiş implementasyon)
-def rsa_manual_gcd(a: int, b: int) -> int:
+# Yardımcı fonksiyonlar (DSA için kullanılıyor)
+def manual_gcd(a: int, b: int) -> int:
   """En büyük ortak bölen"""
   while b:
     a, b = b, a % b
   return a
 
 
-def rsa_manual_mod_pow(base: int, exp: int, mod: int) -> int:
-  """Modüler üs alma (basit versiyon)"""
+def manual_mod_pow(base: int, exp: int, mod: int) -> int:
+  """Modüler üs alma"""
   result = 1
   base = base % mod
   while exp > 0:
@@ -1112,7 +1112,7 @@ def rsa_manual_mod_pow(base: int, exp: int, mod: int) -> int:
   return result
 
 
-def rsa_manual_is_prime(n: int) -> bool:
+def manual_is_prime(n: int) -> bool:
   """Basit asal sayı kontrolü"""
   if n < 2:
     return False
@@ -1124,104 +1124,6 @@ def rsa_manual_is_prime(n: int) -> bool:
     if n % i == 0:
       return False
   return True
-
-
-def rsa_manual_generate_keys(key_size: int = 512) -> tuple[tuple[int, int], tuple[int, int]]:
-  """Basit RSA anahtar çifti oluşturur (eğitim amaçlı)"""
-  # Küçük sayılar için basit asal sayılar kullan
-  # Gerçek RSA çok daha karmaşıktır
-  primes = [101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 
-            151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199,
-            211, 223, 227, 229, 233, 239, 241, 251]
-  
-  # İki farklı asal sayı seç
-  import random
-  p = random.choice(primes)
-  q = random.choice([x for x in primes if x != p])
-  
-  n = p * q
-  phi = (p - 1) * (q - 1)
-  
-  # e seç (1 < e < phi ve gcd(e, phi) = 1)
-  e = 65537
-  if e >= phi or rsa_manual_gcd(e, phi) != 1:
-    for candidate in range(3, phi, 2):
-      if rsa_manual_gcd(candidate, phi) == 1:
-        e = candidate
-        break
-  
-  # d seç (d * e ≡ 1 (mod phi))
-  d = mod_inverse(e, phi)
-  if d is None:
-    raise ValueError("Modüler ters bulunamadı")
-  
-  public_key = (n, e)
-  private_key = (n, d)
-  return public_key, private_key
-
-
-def rsa_manual_encrypt(text: str, public_key: tuple[int, int]) -> str:
-  """RSA şifreleme - kütüphanesiz basit implementasyon"""
-  try:
-    n, e = public_key
-    text_bytes = text.encode('utf-8')
-    
-    # Her byte'ı şifrele
-    encrypted_ints = []
-    for byte_val in text_bytes:
-      # c = m^e mod n
-      encrypted_int = rsa_manual_mod_pow(byte_val, e, n)
-      encrypted_ints.append(encrypted_int)
-    
-    # Base64 ile kodla
-    encrypted_bytes = b''.join(i.to_bytes((i.bit_length() + 7) // 8, 'big') for i in encrypted_ints)
-    return base64.b64encode(encrypted_bytes).decode('utf-8')
-  except Exception as e:
-    raise ValueError(f"RSA (manuel) şifreleme hatası: {str(e)}")
-
-
-def rsa_manual_decrypt(encrypted_text: str, private_key: tuple[int, int]) -> str:
-  """RSA deşifreleme - kütüphanesiz basit implementasyon"""
-  try:
-    n, d = private_key
-    encrypted_bytes = base64.b64decode(encrypted_text.encode('utf-8'))
-    
-    # Şifreli integer değerlerini parse et
-    # Format: Her şifreli değer bir integer olarak saklanmış
-    decrypted_bytes = []
-    
-    # Basitleştirilmiş parse: byte dizisini integer'lara çevir
-    # Gerçek implementasyonda daha karmaşık encoding kullanılır
-    idx = 0
-    while idx < len(encrypted_bytes):
-      # Şifreli integer değerini oku (basit yaklaşım)
-      # Her şifreli değer için n'nin byte boyutunu kullan
-      bytes_needed = (n.bit_length() + 7) // 8
-      if idx + bytes_needed > len(encrypted_bytes):
-        # Son kısım
-        remaining = len(encrypted_bytes) - idx
-        if remaining > 0:
-          val_bytes = encrypted_bytes[idx:idx+remaining]
-          if len(val_bytes) > 0:
-            encrypted_int = int.from_bytes(val_bytes, 'big')
-            # m = c^d mod n
-            decrypted_int = rsa_manual_mod_pow(encrypted_int, d, n)
-            if decrypted_int < 256:
-              decrypted_bytes.append(decrypted_int)
-        break
-      
-      val_bytes = encrypted_bytes[idx:idx+bytes_needed]
-      encrypted_int = int.from_bytes(val_bytes, 'big')
-      # m = c^d mod n
-      decrypted_int = rsa_manual_mod_pow(encrypted_int, d, n)
-      if decrypted_int < 256:
-        decrypted_bytes.append(decrypted_int)
-      
-      idx += bytes_needed
-    
-    return bytes(decrypted_bytes).decode('utf-8')
-  except Exception as e:
-    raise ValueError(f"RSA (manuel) deşifreleme hatası: {str(e)}")
 
 
 # -----------------------------
@@ -1321,7 +1223,7 @@ def dsa_manual_generate_keys(key_size: int = 1024) -> tuple[dict, dict]:
   # p = q * k + 1 (basitleştirilmiş)
   k = random.randint(10, 50)
   p = q * k + 1
-  while not rsa_manual_is_prime(p):
+  while not manual_is_prime(p):
     k += 1
     p = q * k + 1
     if p > 10000:  # Limit
@@ -1330,7 +1232,7 @@ def dsa_manual_generate_keys(key_size: int = 1024) -> tuple[dict, dict]:
   
   # g seç (generator)
   g = 2
-  while rsa_manual_mod_pow(g, (p - 1) // q, p) == 1:
+  while manual_mod_pow(g, (p - 1) // q, p) == 1:
     g += 1
     if g > 100:  # Limit
       g = 3
@@ -1340,7 +1242,7 @@ def dsa_manual_generate_keys(key_size: int = 1024) -> tuple[dict, dict]:
   x = random.randint(2, q - 1)
   
   # Public key: y = g^x mod p
-  y = rsa_manual_mod_pow(g, x, p)
+  y = manual_mod_pow(g, x, p)
   
   private_key = {"p": p, "q": q, "g": g, "x": x}
   public_key = {"p": p, "q": q, "g": g, "y": y}
@@ -1366,7 +1268,7 @@ def dsa_manual_sign(text: str, private_key: dict) -> str:
     k = random.randint(1, q - 1)
     
     # r = (g^k mod p) mod q
-    r = rsa_manual_mod_pow(g, k, p) % q
+    r = manual_mod_pow(g, k, p) % q
     if r == 0:
       r = 1
     
@@ -1428,8 +1330,8 @@ def dsa_manual_verify(signed_data: str, public_key: dict) -> str:
     u2 = (r * w) % q
     
     # v = ((g^u1 * y^u2) mod p) mod q
-    g_u1 = rsa_manual_mod_pow(g, u1, p)
-    y_u2 = rsa_manual_mod_pow(y, u2, p)
+    g_u1 = manual_mod_pow(g, u1, p)
+    y_u2 = manual_mod_pow(y, u2, p)
     v = ((g_u1 * y_u2) % p) % q
     
     # v == r ise imza geçerli
@@ -1466,7 +1368,6 @@ class FormState:
   rsa_key_size: int = 2048
   rsa_public_key: str = ""
   rsa_private_key: str = ""
-  rsa_use_library: bool = True
   dsa_key_size: int = 2048
   dsa_public_key: str = ""
   dsa_private_key: str = ""
@@ -1502,7 +1403,6 @@ def handle_form(req) -> FormState:
   rsa_key_size_raw = req.form.get("rsaKeySize", "2048")
   rsa_public_key = (req.form.get("rsaPublicKey") or "").strip()
   rsa_private_key = (req.form.get("rsaPrivateKey") or "").strip()
-  rsa_use_library_raw = req.form.get("rsaUseLibrary", "true")
   dsa_key_size_raw = req.form.get("dsaKeySize", "2048")
   dsa_public_key = (req.form.get("dsaPublicKey") or "").strip()
   dsa_private_key = (req.form.get("dsaPrivateKey") or "").strip()
@@ -1523,7 +1423,6 @@ def handle_form(req) -> FormState:
     des_use_library=des_use_library_raw.lower() == "true",
     rsa_public_key=rsa_public_key,
     rsa_private_key=rsa_private_key,
-    rsa_use_library=rsa_use_library_raw.lower() == "true",
     dsa_public_key=dsa_public_key,
     dsa_private_key=dsa_private_key,
     dsa_use_library=dsa_use_library_raw.lower() == "true",
@@ -1768,56 +1667,26 @@ def handle_form(req) -> FormState:
         # Zaman ölçümü başlat
         start_time = time.perf_counter()
         
-        if state.rsa_use_library:
-          if mode == "encrypt":
-            if not rsa_public_key:
-              state.status = "RSA şifreleme için public key gereklidir. Anahtar oluştur butonuna basın."
-              state.is_error = True
-              return state
-            state.output = rsa_library_encrypt(text, rsa_public_key)
-            method_type = "kütüphaneli"
-            operation = "şifreleme"
-          else:
-            if not rsa_private_key:
-              state.status = "RSA deşifreleme için private key gereklidir."
-              state.is_error = True
-              return state
-            state.output = rsa_library_decrypt(text, rsa_private_key)
-            method_type = "kütüphaneli"
-            operation = "deşifreleme"
+        if mode == "encrypt":
+          if not rsa_public_key:
+            state.status = "RSA şifreleme için public key gereklidir. Anahtar oluştur butonuna basın."
+            state.is_error = True
+            return state
+          state.output = rsa_library_encrypt(text, rsa_public_key)
+          operation = "şifreleme"
         else:
-          # Kütüphanesiz RSA için anahtarları oluştur veya kullan
-          if mode == "encrypt":
-            if not rsa_public_key:
-              # Anahtar oluştur
-              pub_key_tuple, priv_key_tuple = rsa_manual_generate_keys(state.rsa_key_size)
-              state.rsa_public_key = f"{pub_key_tuple[0]},{pub_key_tuple[1]}"
-              state.rsa_private_key = f"{priv_key_tuple[0]},{priv_key_tuple[1]}"
-              pub_key = pub_key_tuple
-            else:
-              # String'den tuple'a çevir: "n,e" formatı
-              parts = rsa_public_key.split(",")
-              pub_key = (int(parts[0]), int(parts[1]))
-            state.output = rsa_manual_encrypt(text, pub_key)
-            method_type = "kütüphanesiz"
-            operation = "şifreleme"
-          else:
-            if not rsa_private_key:
-              state.status = "RSA deşifreleme için private key gereklidir."
-              state.is_error = True
-              return state
-            # String'den tuple'a çevir: "n,d" formatı
-            parts = rsa_private_key.split(",")
-            priv_key = (int(parts[0]), int(parts[1]))
-            state.output = rsa_manual_decrypt(text, priv_key)
-            method_type = "kütüphanesiz"
-            operation = "deşifreleme"
+          if not rsa_private_key:
+            state.status = "RSA deşifreleme için private key gereklidir."
+            state.is_error = True
+            return state
+          state.output = rsa_library_decrypt(text, rsa_private_key)
+          operation = "deşifreleme"
         
         # Zaman ölçümü bitir
         end_time = time.perf_counter()
         elapsed_time = (end_time - start_time) * 1000  # milisaniyeye çevir
         
-        state.status = f"RSA ({method_type}) ile {operation} tamamlandı. Süre: {elapsed_time:.3f} ms"
+        state.status = f"RSA (kütüphaneli) ile {operation} tamamlandı. Süre: {elapsed_time:.3f} ms"
       except ValueError as e:
         state.status = f"RSA hatası: {str(e)}"
         state.is_error = True
@@ -1902,26 +1771,17 @@ def handle_form(req) -> FormState:
 
 @app.route("/generate-rsa-keys", methods=["POST"])
 def generate_rsa_keys():
-  """RSA anahtar çifti oluşturur"""
+  """RSA anahtar çifti oluşturur (sadece kütüphaneli)"""
   from flask import jsonify
   try:
     key_size = int(request.form.get("keySize", "2048"))
-    use_library = request.form.get("useLibrary", "true").lower() == "true"
     
-    if use_library:
-      public_key, private_key = rsa_library_generate_keys(key_size)
-      return jsonify({
-        "success": True,
-        "public_key": public_key.decode('utf-8'),
-        "private_key": private_key.decode('utf-8')
-      })
-    else:
-      pub_key_tuple, priv_key_tuple = rsa_manual_generate_keys(key_size)
-      return jsonify({
-        "success": True,
-        "public_key": f"{pub_key_tuple[0]},{pub_key_tuple[1]}",
-        "private_key": f"{priv_key_tuple[0]},{priv_key_tuple[1]}"
-      })
+    public_key, private_key = rsa_library_generate_keys(key_size)
+    return jsonify({
+      "success": True,
+      "public_key": public_key.decode('utf-8'),
+      "private_key": private_key.decode('utf-8')
+    })
   except Exception as e:
     from flask import jsonify
     return jsonify({"success": False, "error": str(e)})
