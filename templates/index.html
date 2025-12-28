@@ -10,7 +10,7 @@
     <div class="app">
       <header class="header">
         <h1>Şifreleme Aracı (Python)</h1>
-        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair, Route, Affine, Hill Cipher, Columnar, AES, DES, RSA ve DSA algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
+        <p>Sezar, Rail Fence, Vigenere, Vernam, Playfair, Route, Affine, Hill Cipher, Columnar, AES, DES, RSA, DSA ve ECC algoritmalarını Python ile sunucu tarafında çalıştırır.</p>
       </header>
 
       <main class="main">
@@ -70,6 +70,9 @@
                   </option>
                   <option value="dsa" {% if state.algorithm == "dsa" %}selected{% endif %}>
                     DSA (Dijital İmza)
+                  </option>
+                  <option value="ecc" {% if state.algorithm == "ecc" %}selected{% endif %}>
+                    ECC (Eliptik Eğri Kriptografisi)
                   </option>
                 </select>
               </label>
@@ -416,6 +419,63 @@
                 </p>
               </div>
 
+              <div
+                class="algorithm-options"
+                id="eccOptions"
+                {% if state.algorithm != "ecc" %}style="display:none"{% endif %}
+              >
+                <label class="field inline">
+                  <span>Eğri Tipi</span>
+                  <select name="eccCurve">
+                    <option value="P-192" {% if state.ecc_curve == "P-192" %}selected{% endif %}>P-192</option>
+                    <option value="P-224" {% if state.ecc_curve == "P-224" %}selected{% endif %}>P-224</option>
+                    <option value="P-256" {% if state.ecc_curve == "P-256" %}selected{% endif %}>P-256</option>
+                    <option value="P-384" {% if state.ecc_curve == "P-384" %}selected{% endif %}>P-384</option>
+                    <option value="P-521" {% if state.ecc_curve == "P-521" %}selected{% endif %}>P-521</option>
+                    <option value="secp256k1" {% if state.ecc_curve == "secp256k1" %}selected{% endif %}>secp256k1</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Public Key (Şifreleme için)</span>
+                  <textarea
+                    name="eccPublicKey"
+                    rows="4"
+                    placeholder="Public key'i buraya yapıştırın veya 'Anahtar Oluştur' butonuna basın..."
+                  >{{ state.ecc_public_key }}</textarea>
+                </label>
+                <label class="field">
+                  <span>Private Key (Deşifreleme için)</span>
+                  <textarea
+                    name="eccPrivateKey"
+                    rows="4"
+                    placeholder="Private key'i buraya yapıştırın..."
+                  >{{ state.ecc_private_key }}</textarea>
+                </label>
+                <div class="mode-toggle">
+                  <label>
+                    <input
+                      type="radio"
+                      name="eccUseLibrary"
+                      value="true"
+                      {% if state.ecc_use_library %}checked{% endif %}
+                    />
+                    Kütüphaneli (pycryptodome)
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="eccUseLibrary"
+                      value="false"
+                      {% if not state.ecc_use_library %}checked{% endif %}
+                    />
+                    Kütüphanesiz (manuel)
+                  </label>
+                </div>
+                <button type="button" id="generateEccKeysBtn" class="secondary" style="margin-top: 10px;">
+                  Anahtar Çifti Oluştur
+                </button>
+              </div>
+
               <div class="mode-toggle">
                 <label>
                   <input
@@ -480,6 +540,7 @@
           AES: gelişmiş şifreleme standardı (kütüphaneli/kütüphanesiz). DES: veri şifreleme standardı (kütüphaneli/kütüphanesiz).
           RSA: asimetrik şifreleme algoritması (public/private key çifti kullanır, kütüphaneli/kütüphanesiz).
           DSA: dijital imza algoritması (imza oluşturma ve doğrulama, kütüphaneli/kütüphanesiz).
+          ECC: eliptik eğri kriptografisi (modern asimetrik şifreleme, kütüphaneli/kütüphanesiz).
         </small>
       </footer>
     </div>
@@ -500,9 +561,11 @@
       const desOptions = document.getElementById("desOptions");
       const rsaOptions = document.getElementById("rsaOptions");
       const dsaOptions = document.getElementById("dsaOptions");
+      const eccOptions = document.getElementById("eccOptions");
       const clearBtn = document.getElementById("clearBtn");
       const generateRsaKeysBtn = document.getElementById("generateRsaKeysBtn");
       const generateDsaKeysBtn = document.getElementById("generateDsaKeysBtn");
+      const generateEccKeysBtn = document.getElementById("generateEccKeysBtn");
       const outputText = document.getElementById("outputText");
       const statusEl = document.getElementById("status");
       const copyBtn = document.getElementById("copyBtn");
@@ -522,6 +585,7 @@
         desOptions.style.display = "none";
         rsaOptions.style.display = "none";
         dsaOptions.style.display = "none";
+        eccOptions.style.display = "none";
       }
 
       algorithmSelect.addEventListener("change", () => {
@@ -554,6 +618,8 @@
           rsaOptions.style.display = "";
         } else if (val === "dsa") {
           dsaOptions.style.display = "";
+        } else if (val === "ecc") {
+          eccOptions.style.display = "";
         }
       });
 
@@ -633,6 +699,46 @@
           } finally {
             generateDsaKeysBtn.disabled = false;
             generateDsaKeysBtn.textContent = "Anahtar Çifti Oluştur";
+          }
+        });
+      }
+
+      // ECC anahtar oluştur butonu
+      if (generateEccKeysBtn) {
+        generateEccKeysBtn.addEventListener("click", async () => {
+          const curveName = document.querySelector('select[name="eccCurve"]').value || "P-256";
+          const useLibrary = document.querySelector('input[name="eccUseLibrary"]:checked').value === "true";
+          
+          const formData = new FormData();
+          formData.append("curveName", curveName);
+          formData.append("useLibrary", useLibrary);
+          
+          try {
+            generateEccKeysBtn.disabled = true;
+            generateEccKeysBtn.textContent = "Oluşturuluyor...";
+            
+            const response = await fetch("/generate-ecc-keys", {
+              method: "POST",
+              body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+              document.querySelector('textarea[name="eccPublicKey"]').value = data.public_key;
+              document.querySelector('textarea[name="eccPrivateKey"]').value = data.private_key;
+              statusEl.textContent = "ECC anahtar çifti başarıyla oluşturuldu.";
+              statusEl.style.color = "#9ca3af";
+            } else {
+              statusEl.textContent = `Anahtar oluşturma hatası: ${data.error}`;
+              statusEl.style.color = "#f87171";
+            }
+          } catch (error) {
+            statusEl.textContent = `Anahtar oluşturma hatası: ${error.message}`;
+            statusEl.style.color = "#f87171";
+          } finally {
+            generateEccKeysBtn.disabled = false;
+            generateEccKeysBtn.textContent = "Anahtar Çifti Oluştur";
           }
         });
       }
